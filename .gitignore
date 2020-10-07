@@ -1,0 +1,5 @@
+.DS_Store
+.vscode/
+
+#ignore movielens-large data set
+movielens-large
