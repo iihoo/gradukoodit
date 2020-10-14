@@ -1,58 +1,93 @@
 import pandas as pd
+import numpy as np
 import random
+import math
 
-ratings = pd.read_csv('movielens-large/ratings.csv')
-movies = pd.read_csv('movielens-large/movies.csv')
+ratingsDF = pd.read_csv(
+    'movielens-large/ratings.csv').drop(['timestamp'], axis=1)
+moviesDF = pd.read_csv('movielens-small/movies.csv')
 
-# remove timestamp from the ratings data
-ratings.drop('timestamp', axis=1, inplace=True)
-#print(ratings)
+# calculate Pearson Correlation value between the target user and candidate users
+# returns a dataframe with columns PearsonCorr and userId
 
-# number of unique users in the data
-#ratings['userId'].nunique()
 
-# number of unique movies in the data
-#movies['movieId'].nunique()
+def pearson_correlations(targetUserRatings, similarUserCandidates):
+    pearsonCorrelationDict = {}
 
-# create the group by choosing random members
-# note: avoid duplicate members
-#group = [random.randint(1,ratings['userId'].nunique()), random.randint(1,ratings['userId'].nunique()), random.randint(1,ratings['userId'].nunique())]
-#print(group)
+    for userId, ratings in similarUserCandidates:
+        ratings = ratings.sort_values(by='movieId')
+        targetUserRatings = targetUserRatings.sort_values(by='movieId')
 
-# df index = userId, columns = movieId
-# NOTE should NAN values be filled with 0?
-# NOTE we could insert values to the matrix as user-movie 'rows' OR as movie-user 'columns'
-# --> check which way is more efficient
-#df = pd.DataFrame(index = ratings['userId'].unique(), columns = ratings['movieId'].unique())
-df = pd.DataFrame(index = ratings['userId'].unique())
-df.index.name = 'userId'
+        numberOfRatings = len(ratings)
+        moviesInCommon = targetUserRatings[targetUserRatings['movieId'].isin(
+            ratings['movieId'].tolist())]
+        ratingsOfMoviesInCommonByTargetUser = moviesInCommon['rating'].tolist()
+        ratingsOfOtherUser = ratings['rating'].tolist()
 
-#df = pd.DataFrame(columns = ratings['movieId'].unique())
+        Sxx = sum([i**2 for i in ratingsOfMoviesInCommonByTargetUser]) - \
+            pow(sum(ratingsOfMoviesInCommonByTargetUser), 2) / \
+            float(numberOfRatings)
+        Syy = sum([i**2 for i in ratingsOfOtherUser]) - \
+            pow(sum(ratingsOfOtherUser), 2)/float(numberOfRatings)
+        Sxy = sum(i*j for i, j in zip(ratingsOfMoviesInCommonByTargetUser, ratingsOfOtherUser)) - \
+            sum(ratingsOfMoviesInCommonByTargetUser) * \
+            sum(ratingsOfOtherUser)/float(numberOfRatings)
 
-#ratings for user 1
-##condition = ratings['userId'] == 1
-# take columns rating and movieId, where userId = 1, the set movieId as index
-##r_1 = ratings[condition][['movieId', 'rating']].set_index('movieId')
-##print(r_1)
+        if Sxx != 0 and Syy != 0:
+            pearsonCorrelationDict[userId] = Sxy/math.sqrt(Sxx*Syy)
+        else:
+            pearsonCorrelationDict[userId] = 0
 
-##result = df.append(pd.Series(r_1['rating'], index=r_1.index), ignore_index=True)
-##result.index += 1
-##print(result)
+    # create a correlation dataframe and sort according to the correlation value (descending)
+    correlationsDF = pd.DataFrame.from_dict(
+        pearsonCorrelationDict, orient='index')
+    correlationsDF.columns = ['PearsonCorr']
+    correlationsDF['userId'] = correlationsDF.index
+    correlationsDF.index = range(len(correlationsDF))
+    correlationsDF.sort_values(by='PearsonCorr', ascending=False, inplace=True)
 
-### try with adding columns movie-user to the matrix
+    # NOTE check if necessary..
+    # finally, remove those users, that have negatice correlation value
+    return correlationsDF[correlationsDF['PearsonCorr'] > 0]
 
-# ratings for movie 1
-condition = ratings['movieId'] == 1
-# take columns movieId and userId, where movieId = 1, the set userId as index
-m_1 = ratings[condition][['userId', 'rating']].set_index('userId').rename(columns={'rating' : 1})
-#m_1.index.name = None
+# get similar users for target user (userId)
+# function will return top 'n' users based on the number of movies watched in common
 
-print(ratings)
 
-print('movie 1 ratings')
-print(m_1)
+def similar_users(df, userId, n):
+    print('\ntarget user: ', userId)
+    targetUserRatings = df[df['userId'] == userId]
 
-# update original matrix
-#df.update(m_1)
-df.insert(loc=len(df.columns), column = 1, value=m_1)
-print(df)
+    print('\nsubset of users that have watched the same movies as the target user')
+    condition1 = df['userId'] != userId
+    condition2 = df['movieId'].isin(targetUserRatings['movieId'].tolist())
+    userSubset = df[condition1 & condition2]
+
+    # sort in descending order
+    userSubsetSorted = sorted(userSubset.groupby(
+        ['userId']), key=lambda x: len(x[1]), reverse=True)
+
+    return pearson_correlations(targetUserRatings, userSubsetSorted[:n])
+
+
+def calculate_ratings(ratingsDF, correlationsDF):
+    df = correlationsDF.merge(
+        ratingsDF, left_on='userId', right_on='userId', how='inner')
+    # calculate weighted ratings and add it as a column
+    df['weighted rating'] = df['PearsonCorr'] * df['rating']
+    print(df)
+
+    # Applies a sum to the topUsers after grouping it up by userId
+    tempTopUsersRating = df.groupby('movieId').sum()[
+        ['PearsonCorr', 'weighted rating']]
+    tempTopUsersRating.columns = ['sum_PearsonCorr', 'sum_weighted_rating']
+
+    recommendationDF = pd.DataFrame()
+    recommendationDF['recommendation score'] = tempTopUsersRating['sum_weighted_rating']/tempTopUsersRating['sum_PearsonCorr']
+    recommendationDF['movieId'] = tempTopUsersRating.index
+    recommendationDf = recommendationDF.sort_values(by='recommendation score', ascending=False, inplace=True)
+    print(recommendationDF)
+
+
+correlationsDF = similar_users(ratingsDF, 1, 100)
+calculate_ratings(ratingsDF, correlationsDF)
