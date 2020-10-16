@@ -3,14 +3,12 @@ import numpy as np
 import random
 import math
 
-ratingsDF = pd.read_csv(
-    'movielens-large/ratings.csv').drop(['timestamp'], axis=1)
+ratingsDF = pd.read_csv('movielens-small/ratings.csv')
+ratingsDF.drop(['timestamp'], axis=1, inplace=True)
 moviesDF = pd.read_csv('movielens-small/movies.csv')
 
 # calculate Pearson Correlation value between the target user and candidate users
 # returns a dataframe with columns PearsonCorr and userId
-
-
 def pearson_correlations(targetUserRatings, similarUserCandidates):
     pearsonCorrelationDict = {}
 
@@ -47,14 +45,13 @@ def pearson_correlations(targetUserRatings, similarUserCandidates):
     correlationsDF.sort_values(by='PearsonCorr', ascending=False, inplace=True)
 
     # NOTE check if necessary..
-    # finally, remove those users, that have negatice correlation value
-    return correlationsDF[correlationsDF['PearsonCorr'] > 0]
+    # finally, remove those users, that have a correlation value lower than threshold
+    correlationThreshold = 0
+    return correlationsDF[correlationsDF['PearsonCorr'] > correlationThreshold]
 
 # get similar users for target user (userId)
-# function will return top 'n' users based on the number of movies watched in common
-
-
-def similar_users(df, userId, n):
+# function will return max 'n' users
+def similar_users(df, userId, maxSimilarUsers):
     print('\ntarget user: ', userId)
     targetUserRatings = df[df['userId'] == userId]
 
@@ -67,27 +64,68 @@ def similar_users(df, userId, n):
     userSubsetSorted = sorted(userSubset.groupby(
         ['userId']), key=lambda x: len(x[1]), reverse=True)
 
-    return pearson_correlations(targetUserRatings, userSubsetSorted[:n])
+    return pearson_correlations(targetUserRatings, userSubsetSorted[:maxSimilarUsers])
 
 
-def calculate_ratings(ratingsDF, correlationsDF):
+def calculate_ratings(ratingsDF, correlationsDF, userId):
+    # prediction function:
+    # pred(a,p) = avg(r_a) + sum( sim(a,b)*(r_b,p - avg(r_b)) ) / sum(sim(a,b))
+
+    # calculate average rating for each user, and rename column
+    avg = ratingsDF.groupby('userId').mean().rename(columns={'rating':'average rating, user'})['average rating, user']
+    print('AVERAGE RATINGS')
+    print(avg)
+
+    # merge correlation values to ratings 
     df = correlationsDF.merge(
         ratingsDF, left_on='userId', right_on='userId', how='inner')
-    # calculate weighted ratings and add it as a column
-    df['weighted rating'] = df['PearsonCorr'] * df['rating']
+    print('CORRELATIONS MERGED TO RATINGS')
+    print(df)
+   
+    # merge average ratings to ratings
+    df = df.merge(avg, left_on='userId', right_on='userId', how='inner')
+    print('AVERAGE RATINGS MERGED TO RATINGS')
+    print(df)
+
+    # calculate adjusted ratings and add it as a column
+    df['adjusted rating'] = df['PearsonCorr'] * (df['rating'] - df['average rating, user'])
+    print('ADJUSTED RATINGS ADDED TO RATINGS')
     print(df)
 
     # Applies a sum to the topUsers after grouping it up by userId
-    tempTopUsersRating = df.groupby('movieId').sum()[
-        ['PearsonCorr', 'weighted rating']]
-    tempTopUsersRating.columns = ['sum_PearsonCorr', 'sum_weighted_rating']
+    # group by movieId and calculate sum columns 'PearsonCorr', 'weighted rating'
+    tempValuesDF = df.groupby('movieId').sum()[
+        ['PearsonCorr', 'adjusted rating']]
 
+    # rename columns
+    tempValuesDF.columns = ['sum_PearsonCorr', 'sum_adjusted_rating']
+    tempValuesDF['sum_adjusted_rating / sum_PearsonCorr'] = tempValuesDF['sum_adjusted_rating'] / tempValuesDF['sum_PearsonCorr']
+    print('TEMP TABLE FOR CALCULATIONS')
+    print(tempValuesDF)
+
+    # create recommendation dataframe
     recommendationDF = pd.DataFrame()
-    recommendationDF['recommendation score'] = tempTopUsersRating['sum_weighted_rating']/tempTopUsersRating['sum_PearsonCorr']
-    recommendationDF['movieId'] = tempTopUsersRating.index
+    recommendationDF['recommendation score'] = avg[userId] + tempValuesDF['sum_adjusted_rating'] / tempValuesDF['sum_PearsonCorr']
+    recommendationDF['movieId'] = tempValuesDF.index
     recommendationDf = recommendationDF.sort_values(by='recommendation score', ascending=False, inplace=True)
+    print('RECOMMENDATIONS')
     print(recommendationDF)
 
+    from sklearn.preprocessing import MinMaxScaler
+    scaler = MinMaxScaler(feature_range=(0.5,5.0))
+    recommendationDF['recommendation score, scaled'] = scaler.fit_transform(recommendationDF['recommendation score'].values.reshape(-1,1))
+    print(recommendationDF)
 
-correlationsDF = similar_users(ratingsDF, 1, 100)
-calculate_ratings(ratingsDF, correlationsDF)
+#####################################
+# scale of ratings = tuple of (lowest rating, highest rating)
+ratingScale = ratingsDF['rating'].unique()
+ratingScale.sort()
+ratingScale = (ratingScale[0], ratingScale[len(ratingScale) - 1])
+
+userId = 1
+correlationsDF = similar_users(ratingsDF, userId, 100)
+calculate_ratings(ratingsDF, correlationsDF, userId)
+
+
+
+
