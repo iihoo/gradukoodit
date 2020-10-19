@@ -46,7 +46,7 @@ def pearson_correlations(targetUserRatings, similarUserCandidates):
 
     # NOTE check if necessary..
     # finally, remove those users, that have a correlation value lower than threshold
-    correlationThreshold = 0
+    correlationThreshold = 0.2
     return correlationsDF[correlationsDF['PearsonCorr'] > correlationThreshold]
 
 # get similar users for target user (userId)
@@ -67,7 +67,7 @@ def similar_users(df, userId, maxSimilarUsers):
     return pearson_correlations(targetUserRatings, userSubsetSorted[:maxSimilarUsers])
 
 
-def calculate_ratings(ratingsDF, correlationsDF, userId):
+def calculate_recommendations(ratingsDF, correlationsDF, userId):
     # prediction function:
     # pred(a,p) = avg(r_a) + sum( sim(a,b)*(r_b,p - avg(r_b)) ) / sum(sim(a,b))
 
@@ -112,20 +112,75 @@ def calculate_ratings(ratingsDF, correlationsDF, userId):
     print(recommendationDF)
 
     from sklearn.preprocessing import MinMaxScaler
-    scaler = MinMaxScaler(feature_range=(0.5,5.0))
+    ratingScale = ratingsDF['rating'].unique()
+    ratingScale.sort()
+    # scale of ratings = tuple of (lowest rating, highest rating)
+    ratingScale = (ratingScale[0], ratingScale[len(ratingScale) - 1])
+    scaler = MinMaxScaler(feature_range=(ratingScale))
     recommendationDF['recommendation score, scaled'] = scaler.fit_transform(recommendationDF['recommendation score'].values.reshape(-1,1))
-    print(recommendationDF)
+    return recommendationDF
+
+# aggregation method: average
+def calculate_group_recommendation_list_average(recommendationLists):
+    tempGroupRecommendationDF = recommendations[0]
+    
+    for i in range(1, len(recommendationLists)):
+        tempGroupRecommendationDF = tempGroupRecommendationDF.merge(recommendations[i], left_on='movieId', right_on='movieId', how='outer', suffixes=(i - 1, i))
+
+    columns = [col for col in tempGroupRecommendationDF.columns if 'recommendation score, scaled' in col or col == 'movieId']
+    groupRecommendationDF = tempGroupRecommendationDF[columns]
+
+    # remove rows with NaN values
+    # in other words: we only consider the movies, that have a predicted score for each user in the group
+    groupRecommendationDF = groupRecommendationDF.dropna()
+    print(groupRecommendationDF)
+
+    # calculate the average score, and add new column
+    groupRecommendationDF.insert(1, 'average', groupRecommendationDF.iloc[:, 1:].mean(axis=1))
+    groupListSorted = groupRecommendationDF.sort_values(by=['average'], ascending=False)
+    return groupListSorted
+
+# aggregation method: least misery
+def calculate_group_recommendation_list_least_misery(recommendationLists):
+    tempGroupRecommendationDF = recommendations[0]
+    
+    for i in range(1, len(recommendationLists)):
+        tempGroupRecommendationDF = tempGroupRecommendationDF.merge(recommendations[i], left_on='movieId', right_on='movieId', how='outer', suffixes=(i - 1, i))
+
+    columns = [col for col in tempGroupRecommendationDF.columns if 'recommendation score, scaled' in col or col == 'movieId']
+    groupRecommendationDF = tempGroupRecommendationDF[columns]
+
+    # remove rows with NaN values
+    # in other words: we only consider the movies, that have a predicted score for each user in the group
+    groupRecommendationDF = groupRecommendationDF.dropna()
+
+    # calculate the least misery score, and add new column
+    groupRecommendationDF.insert(1, 'least misery', groupRecommendationDF.iloc[:, 1:].min(axis=1))
+    groupListSorted = groupRecommendationDF.sort_values(by=['least misery'], ascending=False)
+    return groupListSorted
 
 #####################################
-# scale of ratings = tuple of (lowest rating, highest rating)
-ratingScale = ratingsDF['rating'].unique()
-ratingScale.sort()
-ratingScale = (ratingScale[0], ratingScale[len(ratingScale) - 1])
 
-userId = 1
-correlationsDF = similar_users(ratingsDF, userId, 100)
-calculate_ratings(ratingsDF, correlationsDF, userId)
+allUsers = ratingsDF['userId'].unique().tolist()
+users = []
+# pick random users
+for i in range(0,4):
+    user = random.choice(allUsers)
+    users.append(user)
+    allUsers.remove(user)
 
+# add individual recommendation lists to a list
+recommendations = []
+for i in range(0,len(users)):
+    correlationsDF = similar_users(ratingsDF, users[i], 50)
+    recommendations.append(calculate_recommendations(ratingsDF, correlationsDF, users[i]))
 
+# aggregate the group recommendation list
+groupList = calculate_group_recommendation_list_average(recommendations)
+print('\n RESULT: average aggregation')
+print(groupList)
 
+groupListLeastMisery = calculate_group_recommendation_list_least_misery(recommendations)
+print('\n RESULT: least misery aggregation')
+print(groupListLeastMisery)
 
