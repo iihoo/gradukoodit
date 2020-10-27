@@ -1,9 +1,12 @@
 import math
 import pandas as pd
 
-# calculate Pearson Correlation value between the target user and candidate users
-# returns a dataframe with columns PearsonCorr and userId
 def pearson_correlations(targetUserRatings, similarUserCandidates, correlationThreshold):
+    """
+    Calculate Pearson Correlation value between the target user and candidate users.
+    
+    Returns a dataframe with columns PearsonCorr and userId.
+    """
     pearsonCorrelationDict = {}
 
     for userId, ratings in similarUserCandidates:
@@ -38,20 +41,21 @@ def pearson_correlations(targetUserRatings, similarUserCandidates, correlationTh
     correlationsDF.index = range(len(correlationsDF))
     correlationsDF.sort_values(by='PearsonCorr', ascending=False, inplace=True)
 
-    # NOTE check if necessary..
     # finally, remove those users, that have a correlation value lower than threshold
     return correlationsDF[correlationsDF['PearsonCorr'] > correlationThreshold]
 
-# get similar users for target user (userId)
-# function will return max 'n' users
-def similar_users(df, userId, maxSimilarUsers, correlationThreshold):
-    print('\ntarget user: ', userId)
-    targetUserRatings = df[df['userId'] == userId]
+def similar_users(ratingsDF, userId, maxSimilarUsers, correlationThreshold):
+    """
+    Get similar users for target user (userId).
+    Function will return max 'n' users.
+    """
+    #print('\ntarget user: ', userId)
+    targetUserRatings = ratingsDF[ratingsDF['userId'] == userId]
 
-    print('\nsubset of users that have watched the same movies as the target user')
-    condition1 = df['userId'] != userId
-    condition2 = df['movieId'].isin(targetUserRatings['movieId'].tolist())
-    userSubset = df[condition1 & condition2]
+    #print('\nsubset of users that have watched the same movies as the target user')
+    condition1 = ratingsDF['userId'] != userId
+    condition2 = ratingsDF['movieId'].isin(targetUserRatings['movieId'].tolist())
+    userSubset = ratingsDF[condition1 & condition2]
 
     # sort in descending order
     userSubsetSorted = sorted(userSubset.groupby(
