@@ -47,12 +47,10 @@ def pearson_correlations(targetUserRatings, similarUserCandidates, correlationTh
 def similar_users(ratingsDF, userId, maxSimilarUsers, correlationThreshold):
     """
     Get similar users for target user (userId).
-    Function will return max 'n' users.
+    Function will return n users (n = maxSimilarUsers).
     """
-    #print('\ntarget user: ', userId)
     targetUserRatings = ratingsDF[ratingsDF['userId'] == userId]
 
-    #print('\nsubset of users that have watched the same movies as the target user')
     condition1 = ratingsDF['userId'] != userId
     condition2 = ratingsDF['movieId'].isin(targetUserRatings['movieId'].tolist())
     userSubset = ratingsDF[condition1 & condition2]
@@ -61,4 +59,5 @@ def similar_users(ratingsDF, userId, maxSimilarUsers, correlationThreshold):
     userSubsetSorted = sorted(userSubset.groupby(
         ['userId']), key=lambda x: len(x[1]), reverse=True)
 
-    return pearson_correlations(targetUserRatings, userSubsetSorted[:maxSimilarUsers], correlationThreshold)
+    correlations = pearson_correlations(targetUserRatings, userSubsetSorted[:maxSimilarUsers], correlationThreshold)
+    return correlations
