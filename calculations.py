@@ -1,4 +1,5 @@
 import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
 
 def calculate_recommendations(ratingsDF, correlationsDF, userId):
     """
@@ -39,7 +40,6 @@ def calculate_recommendations(ratingsDF, correlationsDF, userId):
     recommendationDf = recommendationDF.sort_values(by='recommendation score', ascending=False, inplace=True)
 
     # scale ratings to linear scale using original rating scale from ratings data
-    from sklearn.preprocessing import MinMaxScaler
     ratingScale = ratingsDF['rating'].unique()
     ratingScale.sort()
     # scale of ratings = tuple of (lowest rating, highest rating)
@@ -112,7 +112,7 @@ def calculate_group_recommendation_list_hybrid(recommendationLists, alfa):
     groupListSorted = groupRecommendationDF.sort_values(by=['result'], ascending=False)
     return groupListSorted
 
-def calculate_group_recommendation_list_modified_average_aggregation(recommendationLists, satisfactionScores):
+def calculate_group_recommendation_list_modified_average_aggregation(recommendationLists, satisfactionScores, ratingScale):
     """
     Assembles a group recommendation list from individual users' recommendation lists.
 
@@ -120,16 +120,14 @@ def calculate_group_recommendation_list_modified_average_aggregation(recommendat
 
     Returns a dataframe (group recommendation list).
     """
-
     # calculate the weighing factors for each user for modified average aggregation
     satisfactionAverage = sum(satisfactionScores.values()) / len(satisfactionScores)
+
     factors = {}
     for user in satisfactionScores:
         factors[user] = abs(satisfactionAverage - satisfactionScores[user])
-
     
     tempGroupRecommendationDF = recommendationLists[0]
-    
     for i in range(1, len(recommendationLists)):
         tempGroupRecommendationDF = tempGroupRecommendationDF.merge(recommendationLists[i], left_on='movieId', right_on='movieId', how='outer', suffixes=(i - 1, i))
 
@@ -142,25 +140,42 @@ def calculate_group_recommendation_list_modified_average_aggregation(recommendat
     
     # calculate the average score, and add new column
     groupRecommendationDF.insert(1, 'average', groupRecommendationDF.iloc[:, 1:].mean(axis=1))
-    print(groupRecommendationDF)
 
+    ## rules for modified averaga aggregation:
+    # if r_u > avg_r and sat_u > avg_sat, then w = 1 - f_u
+    # if r_u > avg_r and sat_u < avg_sat, then w = 1 + f_u
+    # if r_u < avg_r and sat_u > avg_sat, then w = 1 + f_u
+    # if r_u < avg_r and sat_u < avg_sat, then w = 1 - f_u
     adjustedRatings = pd.DataFrame(groupRecommendationDF[['movieId', 'average']])
     for user in satisfactionScores:
         adjustedRatings[str(user)] = groupRecommendationDF['prediction for user ' + str(user)]
-        #adjustedRatings['adjusted: ' + str(user)] = adjustedRatings[str(user)].apply(lambda r: r * (1 + factors[u]) if (satisfactionScores[user] > satisfactionAverage and r > ) )
-    print(adjustedRatings)
+        adjustedRatings['prediction for user ' + str(user)] = adjustedRatings[str(user)]
 
-    '''
-    # calculate the least misery score, and add new column
-    groupRecommendationDF.insert(2, 'least misery', groupRecommendationDF.iloc[:, 2:].min(axis=1))
+        condition = adjustedRatings[str(user)] > adjustedRatings['average']
+        
+        # condition: r_u > avg_r:
+        # r_adj = (1 - f_u) * r OR (1 + f_u) * r
+        #adjustedRatings['prediction for user ' + str(user)][condition] = adjustedRatings['prediction for user ' + str(user)][condition].apply(lambda r: r * (1 - factors[user]) if (satisfactionScores[user] > satisfactionAverage) else r * (1 + factors[user]))
+        adjustedRatings.loc[condition, 'prediction for user ' + str(user)] = adjustedRatings.loc[condition, 'prediction for user ' + str(user)].apply(lambda r: r * (1 - factors[user]) if (satisfactionScores[user] > satisfactionAverage) else r * (1 + factors[user]))
 
-    # alfa = max satisfaction score - min satisfaction score, from the previous round
-    groupRecommendationDF.insert(1, 'result', (1 - alfa) * groupRecommendationDF['average'] + alfa * groupRecommendationDF['least misery'])
+        # condition: r_u < avg_r
+        # r_adj = (1 + f_u) * r OR (1 - f_u) * r
+        #adjustedRatings['prediction for user ' + str(user)][~condition] = adjustedRatings['prediction for user ' + str(user)][~condition].apply(lambda r: r * (1 + factors[user]) if (satisfactionScores[user] > satisfactionAverage) else r * (1 - factors[user]))
+        adjustedRatings.loc[~condition, 'prediction for user ' + str(user)].apply(lambda r: r * (1 + factors[user]) if (satisfactionScores[user] > satisfactionAverage) else r * (1 - factors[user]))
+    
+        ### NOTE what if r_u == avg_r OR sat_u == avg_sat??
 
-    groupListSorted = groupRecommendationDF.sort_values(by=['result'], ascending=False)
-    return groupListSorted
-    '''
-    return 0
+        #adjustedRatings.drop([str(user)], axis=1, inplace=True)
+
+    # calculate average of the adjusted predictions and add new column
+    adjustedRatings.insert(1, 'modified average', adjustedRatings.iloc[:, 2:].mean(axis=1))
+
+    # scale ratings
+    scaler = MinMaxScaler(feature_range=(ratingScale))
+    adjustedRatings.insert(1, 'modified average, scaled', scaler.fit_transform(adjustedRatings['modified average'].values.reshape(-1,1)))
+    
+    adjustedRatingsSorted = adjustedRatings.sort_values(by=['modified average, scaled'], ascending=False)
+    return adjustedRatingsSorted
 
 def calculate_satisfaction(groupRecommendationList, users, k):
     """

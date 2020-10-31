@@ -5,7 +5,7 @@ import random
 import correlations
 import calculations
 
-NUMBER_OF_USERS = 3
+NUMBER_OF_USERS = 4
 CORRELATION_THRESHOLD = 0.2
 SIMILAR_USERS_MAX = 50
 
@@ -26,7 +26,63 @@ for i in range(0,len(users)):
     correlationsDF = correlations.similar_users(ratingsDF, users[i], SIMILAR_USERS_MAX, CORRELATION_THRESHOLD)
     recommendations.append(calculations.calculate_recommendations(ratingsDF, correlationsDF, users[i]))
 
+### Compare sequential hybrid aggregation method and sequential modified average aggregation
+# PARAMETERS
+# top-k movies
+k = 10
+
+# alfa variable for hybrid aggregation method
+alfa = 0
+
+# for the first round, initialize satisfaction score = 1, for each user (modified average aggregation)
+satisfactionModifiedAggregation = {u:1 for u in users}
+
+# scale ratings to linear scale using original rating scale from ratings data
+ratingScale = ratingsDF['rating'].unique()
+ratingScale.sort()
+# scale of ratings = tuple of (lowest rating, highest rating)
+ratingScale = (ratingScale[0], ratingScale[len(ratingScale) - 1])
+
+# simulate recommendation rounds
+for i in range(1,5):
+    print('\n**********************************************************************************************************************************')
+    print('ROUND ', i)
+
+    groupListHybrid = calculations.calculate_group_recommendation_list_hybrid(recommendations, alfa)
+    groupListModifiedAggregation = calculations.calculate_group_recommendation_list_modified_average_aggregation(recommendations, satisfactionModifiedAggregation, ratingScale)
+
+    # calculate satisfaction scores, use only top-k items in the group recommendation list
+    satisfactionHybrid = calculations.calculate_satisfaction(groupListHybrid, users, k)
+    satisfactionModifiedAggregation = calculations.calculate_satisfaction(groupListModifiedAggregation, users, k)
+    
+    alfa = max(list(satisfactionHybrid.values())) - min(list(satisfactionHybrid.values()))
+
+    print('Results, hybrid aggregation:')
+    print(groupListHybrid)
+    print('Results, modified aggregation:')
+    print(groupListModifiedAggregation)
+
+
+    print('\nSatisfaction scores after round ', i )
+    print('Hybrid:')
+    [print(key, value) for key, value in satisfactionHybrid.items()]
+    print(sum(satisfactionHybrid.values()) / len(satisfactionHybrid))
+    print('\nModified:')
+    [print(key, value) for key, value in satisfactionModifiedAggregation.items()]
+    print(sum(satisfactionModifiedAggregation.values()) / len(satisfactionModifiedAggregation))
+
+    # remove top-k movies from both group recommendation lists
+    moviesToBeRemoved1 = list(groupListHybrid['movieId'][:k])
+    moviesToBeRemoved2 = list(groupListModifiedAggregation['movieId'][:k])
+    moviesToBeRemoved = moviesToBeRemoved1 + moviesToBeRemoved2
+    # remove from the users' recommendation list
+    for i in range(0,len(recommendations)):
+        condition = ~recommendations[i].movieId.isin(moviesToBeRemoved)
+        recommendations[i] = recommendations[i][condition]
+
+
 '''
+### sequential hybrid aggregation method
 k = 10
 alfa = 0
 
@@ -57,7 +113,39 @@ for i in range(1,3):
         recommendations[i] = recommendations[i][condition]
 '''
 
+'''
+### sequential modified average aggregation
+k = 10
 # for the first round, initialize satisfaction score = 1, for each user
 satisfaction = {u:1 for u in users}
-groupListModifiedAggregation = calculations.calculate_group_recommendation_list_modified_average_aggregation(recommendations, satisfaction)
+
+# scale ratings to linear scale using original rating scale from ratings data
+ratingScale = ratingsDF['rating'].unique()
+ratingScale.sort()
+# scale of ratings = tuple of (lowest rating, highest rating)
+ratingScale = (ratingScale[0], ratingScale[len(ratingScale) - 1])
+
+# simulate recommendation rounds
+for i in range(1,4):
+    print('\n**********************************************************************************************************************************')
+    print('ROUND ', i)
+
+    groupListModifiedAggregation = calculations.calculate_group_recommendation_list_modified_average_aggregation(recommendations, satisfaction, ratingScale)
+
+    # calculate satisfaction scores, use only top-k items in the group recommendation list
+    satisfaction = calculations.calculate_satisfaction(groupListModifiedAggregation, users, k)
+    
+    print('Results:')
+    print(groupListModifiedAggregation)
+
+    print('\nSatisfaction scores after round ', i )
+    [print(key, value) for key, value in satisfaction.items()]
+
+    # remove top-k movies from the grouplist
+    moviesToBeRemoved = list(groupListModifiedAggregation['movieId'][:k])
+    # remove from the users' recommendation list
+    for i in range(0,len(recommendations)):
+        condition = ~recommendations[i].movieId.isin(moviesToBeRemoved)
+        recommendations[i] = recommendations[i][condition]
+'''
 
