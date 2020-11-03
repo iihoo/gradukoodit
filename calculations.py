@@ -1,5 +1,6 @@
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
+from itertools import combinations
 
 def calculate_recommendations(ratingsDF, correlationsDF, userId):
     """
@@ -195,3 +196,12 @@ def calculate_satisfaction(groupRecommendationList, users, k):
         predictedScoreSumOwnList = groupRecommendationList[column].sort_values(by=column[0], ascending=False)[:k].sum()
         satisfaction[user] = predictedScoreSumGroupList.array[0] / predictedScoreSumOwnList.array[0]
     return satisfaction
+
+def calculate_F_score(groupSatOAverage, groupDisOAverage):
+    return 2 * (groupSatOAverage * (1 - groupDisOAverage)) / (groupSatOAverage + (1 - groupDisOAverage))
+
+def calculate_average_of_all_pairwise_differences(satisfactionScoresDict):
+    differences = []
+    for x, y in combinations(satisfactionScoresDict.keys(), 2):
+        differences.append(abs(satisfactionScoresDict[x] - satisfactionScoresDict[y]))
+    return (sum(differences) / len(differences))

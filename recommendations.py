@@ -5,7 +5,7 @@ import random
 import correlations
 import calculations
 
-NUMBER_OF_USERS = 4
+NUMBER_OF_USERS = 5
 CORRELATION_THRESHOLD = 0.2
 SIMILAR_USERS_MAX = 50
 
@@ -43,10 +43,19 @@ ratingScale.sort()
 # scale of ratings = tuple of (lowest rating, highest rating)
 ratingScale = (ratingScale[0], ratingScale[len(ratingScale) - 1])
 
+RECOMMENDATION_ROUNDS = 5
+groupSatOHybrid = []
+groupDisOHybrid = []
+groupSatOModifiedAggregation = []
+groupDisOModifiedAggregation = []
+
+groupDisOHybrid2 = []
+groupDisOModifiedAggregation2 = []
+
 # simulate recommendation rounds
-for i in range(1,5):
+for i in range(1, RECOMMENDATION_ROUNDS + 1):
     print('\n**********************************************************************************************************************************')
-    print('ROUND ', i)
+    print(f'ROUND {i}')
 
     groupListHybrid = calculations.calculate_group_recommendation_list_hybrid(recommendations, alfa)
     groupListModifiedAggregation = calculations.calculate_group_recommendation_list_modified_average_aggregation(recommendations, satisfactionModifiedAggregation, ratingScale)
@@ -54,8 +63,22 @@ for i in range(1,5):
     # calculate satisfaction scores, use only top-k items in the group recommendation list
     satisfactionHybrid = calculations.calculate_satisfaction(groupListHybrid, users, k)
     satisfactionModifiedAggregation = calculations.calculate_satisfaction(groupListModifiedAggregation, users, k)
-    
+
     alfa = max(list(satisfactionHybrid.values())) - min(list(satisfactionHybrid.values()))
+
+    groupSatHybrid = sum(satisfactionHybrid.values()) / len(satisfactionHybrid)
+    groupSatOHybrid.append(groupSatHybrid)
+    groupDisHybrid = max(satisfactionHybrid.values()) - min(satisfactionHybrid.values())
+    groupDisOHybrid.append(groupDisHybrid)
+
+    groupSatModifiedAggregation = sum(satisfactionModifiedAggregation.values()) / len(satisfactionModifiedAggregation)
+    groupSatOModifiedAggregation.append(groupSatModifiedAggregation)
+    groupDisModifiedAggregation = max(satisfactionModifiedAggregation.values()) - min(satisfactionModifiedAggregation.values())
+    groupDisOModifiedAggregation.append(groupDisModifiedAggregation)
+
+    # try also the average of all pairwise disagreements as the dissatisfaction measure
+    groupDisOHybrid2.append(calculations.calculate_average_of_all_pairwise_differences(satisfactionHybrid))
+    groupDisOModifiedAggregation2.append(calculations.calculate_average_of_all_pairwise_differences(satisfactionModifiedAggregation))
 
     print('Results, hybrid aggregation:')
     print(groupListHybrid)
@@ -63,13 +86,16 @@ for i in range(1,5):
     print(groupListModifiedAggregation)
 
 
-    print('\nSatisfaction scores after round ', i )
+    print(f'\nSatisfaction scores after round {i}')
     print('Hybrid:')
-    [print(key, value) for key, value in satisfactionHybrid.items()]
-    print(sum(satisfactionHybrid.values()) / len(satisfactionHybrid))
+    [print(key, round(value, 4)) for key, value in satisfactionHybrid.items()]
+    print(f'GroupSatO: {groupSatHybrid:.4f}')
+    print(f'GroupDisO: {groupDisHybrid:.4f}')
+    
     print('\nModified:')
-    [print(key, value) for key, value in satisfactionModifiedAggregation.items()]
-    print(sum(satisfactionModifiedAggregation.values()) / len(satisfactionModifiedAggregation))
+    [print(key, round(value, 4)) for key, value in satisfactionModifiedAggregation.items()]
+    print(f'GroupSatO: {groupSatModifiedAggregation:.4f}')
+    print(f'GroupDisO: {groupDisModifiedAggregation:.4f}')
 
     # remove top-k movies from both group recommendation lists
     moviesToBeRemoved1 = list(groupListHybrid['movieId'][:k])
@@ -81,6 +107,27 @@ for i in range(1,5):
         recommendations[i] = recommendations[i][condition]
 
 
+groupSatOHybridAverage = sum(groupSatOHybrid) / len(groupSatOHybrid)
+groupDisOHybridAverage = sum(groupDisOHybrid) / len(groupDisOHybrid)
+groupSatOModifiedAggregationAverage = sum(groupSatOModifiedAggregation) / len(groupSatOModifiedAggregation)
+groupDisOModifiedAggregationAverage = sum(groupDisOModifiedAggregation) / len(groupDisOModifiedAggregation)
+print(f'\nAfter {RECOMMENDATION_ROUNDS} recommendation rounds')
+print('HYBRID METHOD')
+print(f'GroupSatO: {groupSatOHybridAverage:.4f}')
+print(f'GroupDisO: {groupDisOHybridAverage:.4f}')
+print(f'F-score: {calculations.calculate_F_score(groupSatOHybridAverage, groupDisOHybridAverage):4f}')
+print('MODIFIED AVERAGE AGGREGATION METHOD')
+print(f'GroupSatO: {groupSatOModifiedAggregationAverage:.4f}')
+print(f'GroupDisO: {groupDisOModifiedAggregationAverage:.4f}')
+print(f'F-score: {calculations.calculate_F_score(groupSatOModifiedAggregationAverage, groupDisOModifiedAggregationAverage):4f}')
+
+groupDisOHybridAverage2 = sum(groupDisOHybrid2) / len(groupDisOHybrid2)
+groupDisOModifiedAggregationAverage2 = sum(groupDisOModifiedAggregation2) / len(groupDisOModifiedAggregation2)
+print(f'Hybrid: GroupDisO with average of all pairwise disagreements {groupDisOHybridAverage2}')
+print(f'Modified aggregation: GroupDisO with average of all pairwise disagreements {groupDisOModifiedAggregationAverage2}')
+
+
+
 '''
 ### sequential hybrid aggregation method
 k = 10
@@ -89,7 +136,7 @@ alfa = 0
 # simulate recommendation rounds
 for i in range(1,3):
     print('\n**********************************************************************************************************************************')
-    print('ROUND ', i, ', alfa = ', alfa)
+    print(f'ROUND {i}, alfa = {alfa}')
 
     groupList = calculations.calculate_group_recommendation_list_hybrid(recommendations, alfa)
 
@@ -101,9 +148,9 @@ for i in range(1,3):
     print('Results:')
     print(groupList)
 
-    print('\nSatisfaction scores after round ', i )
-    [print(key, value) for key, value in satisfaction.items()]
-    print('--> alfa = ', alfa)
+    print(f'\nSatisfaction scores after round {i}')
+    [print(key, round(value, 4) for key, value in satisfaction.items()]
+    print(f'--> alfa = {alfa}')
 
     # remove top-k movies from the grouplist
     moviesToBeRemoved = list(groupList['movieId'][:k])
@@ -128,7 +175,7 @@ ratingScale = (ratingScale[0], ratingScale[len(ratingScale) - 1])
 # simulate recommendation rounds
 for i in range(1,4):
     print('\n**********************************************************************************************************************************')
-    print('ROUND ', i)
+    print(f'ROUND {i}')
 
     groupListModifiedAggregation = calculations.calculate_group_recommendation_list_modified_average_aggregation(recommendations, satisfaction, ratingScale)
 
@@ -138,8 +185,8 @@ for i in range(1,4):
     print('Results:')
     print(groupListModifiedAggregation)
 
-    print('\nSatisfaction scores after round ', i )
-    [print(key, value) for key, value in satisfaction.items()]
+    print(f'\nSatisfaction scores after round {i}')
+    [print(key, round(value, 4)) for key, value in satisfaction.items()]
 
     # remove top-k movies from the grouplist
     moviesToBeRemoved = list(groupListModifiedAggregation['movieId'][:k])
