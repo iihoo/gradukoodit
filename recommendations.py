@@ -5,9 +5,12 @@ import random
 import correlations
 import calculations
 
+# just for printouts
+pd.set_option('display.expand_frame_repr', False)
+
 NUMBER_OF_USERS = 5
-CORRELATION_THRESHOLD = 0.2
-SIMILAR_USERS_MAX = 50
+CORRELATION_THRESHOLD = 0.7
+MOVIES_IN_COMMON_MINIMUM = 6
 
 ratingsDF = pd.read_csv('movielens-small/ratings.csv')
 ratingsDF.drop(['timestamp'], axis=1, inplace=True)
@@ -23,7 +26,7 @@ for i in range(0, NUMBER_OF_USERS):
 # calculate individual recommendation lists and add to a list
 recommendations = []
 for i in range(0,len(users)):
-    correlationsDF = correlations.similar_users(ratingsDF, users[i], SIMILAR_USERS_MAX, CORRELATION_THRESHOLD)
+    correlationsDF = correlations.similar_users(ratingsDF, users[i], MOVIES_IN_COMMON_MINIMUM, CORRELATION_THRESHOLD)
     recommendations.append(calculations.calculate_recommendations(ratingsDF, correlationsDF, users[i]))
 
 ### Compare sequential hybrid aggregation method and sequential modified average aggregation
@@ -43,7 +46,7 @@ ratingScale.sort()
 # scale of ratings = tuple of (lowest rating, highest rating)
 ratingScale = (ratingScale[0], ratingScale[len(ratingScale) - 1])
 
-RECOMMENDATION_ROUNDS = 5
+RECOMMENDATION_ROUNDS = 15
 groupSatOHybrid = []
 groupDisOHybrid = []
 groupSatOModifiedAggregation = []
@@ -116,10 +119,19 @@ print('HYBRID METHOD')
 print(f'GroupSatO: {groupSatOHybridAverage:.4f}')
 print(f'GroupDisO: {groupDisOHybridAverage:.4f}')
 print(f'F-score: {calculations.calculate_F_score(groupSatOHybridAverage, groupDisOHybridAverage):4f}')
+print(f'satisfaction scores for each roundd')
+print(groupSatOHybrid)
+print(f'dissatisfaction scores for each round')
+print(groupDisOHybrid)
 print('MODIFIED AVERAGE AGGREGATION METHOD')
 print(f'GroupSatO: {groupSatOModifiedAggregationAverage:.4f}')
 print(f'GroupDisO: {groupDisOModifiedAggregationAverage:.4f}')
 print(f'F-score: {calculations.calculate_F_score(groupSatOModifiedAggregationAverage, groupDisOModifiedAggregationAverage):4f}')
+print(f'satisfaction scores for each roundd')
+print(groupSatOModifiedAggregation)
+print(f'dissatisfaction scores for each round')
+print(groupDisOModifiedAggregation)
+
 
 groupDisOHybridAverage2 = sum(groupDisOHybrid2) / len(groupDisOHybrid2)
 groupDisOModifiedAggregationAverage2 = sum(groupDisOModifiedAggregation2) / len(groupDisOModifiedAggregation2)
