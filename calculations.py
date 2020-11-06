@@ -2,52 +2,68 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from itertools import combinations
 
-def calculate_recommendations(ratingsDF, correlationsDF, userId):
+import correlations
+
+def calculate_recommendations_all(ratingsDF, users, MOVIES_IN_COMMON_MINIMUM, CORRELATION_THRESHOLD):
+    """
+    Calculates individual recommendation lists for users 'users'.
+
+    Returns a list of individual recommendation lists (list of dataframes).
+    """
+    # calculate average rating for each user, and rename column
+    average = ratingsDF.groupby('userId').mean().rename(columns={'rating':'average rating, user'})['average rating, user']
+
+    # calculate individual recommendation lists and add to a list
+    recommendations = []
+    for i in range(0, len(users)):
+        correlationsDF = correlations.similar_users(ratingsDF, users[i], MOVIES_IN_COMMON_MINIMUM, CORRELATION_THRESHOLD)
+        recommendations.append(calculate_recommendations_single(ratingsDF, average, correlationsDF, users[i]))
+    return recommendations
+
+def calculate_recommendations_single(ratingsDF, average, correlationsDF, userId):
     """
     Calculates a recommendation list for a user (userId).
 
     Returns a dataframe (recommendation list).
 
     Prediction function: 
-    pred(a,p) = avg(r_a) + sum( sim(a,b)*(r_b,p - avg(r_b)) ) / sum(sim(a,b))
+    pred(a,p) = average(r_a) + sum( sim(a,b)*(r_b,p - average(r_b)) ) / sum(sim(a,b))
     """
-
-    # calculate average rating for each user, and rename column
-    avg = ratingsDF.groupby('userId').mean().rename(columns={'rating':'average rating, user'})['average rating, user']
 
     # merge correlation values to ratings 
     df = correlationsDF.merge(
         ratingsDF, left_on='userId', right_on='userId', how='inner')
    
     # merge average ratings to ratings
-    df = df.merge(avg, left_on='userId', right_on='userId', how='inner')
+    df = df.merge(average, left_on='userId', right_on='userId', how='inner')
 
     # calculate adjusted ratings and add it as a column
-    df['adjusted rating'] = df['PearsonCorr'] * (df['rating'] - df['average rating, user'])
+    df['adjusted rating'] = df['PearsonCorrelation'] * (df['rating'] - df['average rating, user'])
 
     # Applies a sum to the topUsers after grouping it up by userId
-    # group by movieId and calculate sum columns 'PearsonCorr', 'weighted rating'
+    # group by movieId and calculate sum columns 'PearsonCorrelation', 'weighted rating'
     tempValuesDF = df.groupby('movieId').sum()[
-        ['PearsonCorr', 'adjusted rating']]
+        ['PearsonCorrelation', 'adjusted rating']]
 
     # rename columns
     tempValuesDF.columns = ['sum_PearsonCorr', 'sum_adjusted_rating']
     tempValuesDF['sum_adjusted_rating / sum_PearsonCorr'] = tempValuesDF['sum_adjusted_rating'] / tempValuesDF['sum_PearsonCorr']
 
-    # create recommendation dataframe
+    # create a recommendation dataframe
     recommendationDF = pd.DataFrame()
-    recommendationDF['recommendation score'] = avg[userId] + tempValuesDF['sum_adjusted_rating'] / tempValuesDF['sum_PearsonCorr']
+    recommendationDF['recommendation score'] = average[userId] + ( tempValuesDF['sum_adjusted_rating'] / tempValuesDF['sum_PearsonCorr'] )
     recommendationDF['movieId'] = tempValuesDF.index
     recommendationDf = recommendationDF.sort_values(by='recommendation score', ascending=False, inplace=True)
 
-    # scale ratings to linear scale using original rating scale from ratings data
+    # get scale of ratings
     ratingScale = ratingsDF['rating'].unique()
     ratingScale.sort()
-    # scale of ratings = tuple of (lowest rating, highest rating)
     ratingScale = (ratingScale[0], ratingScale[len(ratingScale) - 1])
     scaler = MinMaxScaler(feature_range=(ratingScale))
+
+    # scale ratings to linear scale using original rating scale from ratings data
     recommendationDF['prediction for user ' + str(userId)] = scaler.fit_transform(recommendationDF['recommendation score'].values.reshape(-1,1))
-    
+
     return recommendationDF
 
 def calculate_group_recommendation_list(recommendationLists, aggregationMethod):

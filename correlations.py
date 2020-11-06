@@ -1,14 +1,35 @@
 import math
 import pandas as pd
 
-def pearson_correlations(targetUserRatings, similarUserCandidates, moviesInCommonMinimum, correlationThreshold):
+def similar_users(ratingsDF, userId, moviesInCommonMinimum, correlationThreshold):
+    """
+    Get similar users for target user (userId).
+
+    Function will return users that have rated more than 'moviesInCommonMinimum' identical items with the target user (userId).
+    """
+    targetUserRatings = ratingsDF[ratingsDF['userId'] == userId]
+
+    condition1 = ratingsDF['userId'] != userId
+    condition2 = ratingsDF['movieId'].isin(targetUserRatings['movieId'].tolist())
+    userSubset = ratingsDF[condition1 & condition2]
+
+    # filter users that do not have rated more than 'moviesInCommonMinimum' identical movies
+    userSubsetFiltered = userSubset[userSubset['userId'].map(userSubset['userId'].value_counts()) > moviesInCommonMinimum]
+
+    userSubsetFiltered = userSubsetFiltered.groupby(['userId'])
+
+    # calculate Pearson correlation values
+    correlations = pearson_correlations(targetUserRatings, userSubsetFiltered, correlationThreshold)
+
+    return correlations
+
+def pearson_correlations(targetUserRatings, similarUserCandidates, correlationThreshold):
     """
     Calculate Pearson Correlation value between the target user and candidate users.
     
-    Similar users are those users that have rated more than 'moviesInCommonMinimum' movies 
-    and have a correlation value higher than 'correlationThreshold'.
+    Similar users are those users that have a correlation value higher than 'correlationThreshold'.
 
-    Returns a dataframe with columns PearsonCorr and userId.
+    Returns a dataframe with columns PearsonCorrelation and userId.
     """
     pearsonCorrelationDict = {}
 
@@ -45,36 +66,11 @@ def pearson_correlations(targetUserRatings, similarUserCandidates, moviesInCommo
     # create a correlation dataframe and sort according to the correlation value (descending)
     correlationsDF = pd.DataFrame.from_dict(
         pearsonCorrelationDict, orient='index')
-    correlationsDF.columns = ['PearsonCorr']
+    correlationsDF.columns = ['PearsonCorrelation']
     correlationsDF['userId'] = correlationsDF.index
     correlationsDF.index = range(len(correlationsDF))
     # NOTE: is sorting necessary?
-    correlationsDF.sort_values(by='PearsonCorr', ascending=False, inplace=True)
-
-    print('CORRELATIONS, within threshold')
-    print(correlationsDF[correlationsDF['PearsonCorr'] > correlationThreshold])
+    correlationsDF.sort_values(by='PearsonCorrelation', ascending=False, inplace=True)   
 
     # finally, only return those users, that have a correlation value higher than the threshold
-    return correlationsDF[correlationsDF['PearsonCorr'] > correlationThreshold]
-
-def similar_users(ratingsDF, userId, moviesInCommonMinimum, correlationThreshold):
-    """
-    Get similar users for target user (userId).
-
-    Function will return users that have rated more than 'moviesInCommonMinimum' identical items with the target user (userId).
-    """
-    targetUserRatings = ratingsDF[ratingsDF['userId'] == userId]
-
-    condition1 = ratingsDF['userId'] != userId
-    condition2 = ratingsDF['movieId'].isin(targetUserRatings['movieId'].tolist())
-    userSubset = ratingsDF[condition1 & condition2]
-
-    # NOTE: is sorting necessary?
-    # sort in descending order
-    #userSubsetSorted = sorted(userSubset.groupby(
-    #    ['userId']), key=lambda x: len(x[1]), reverse=True)
-
-    userSubset = userSubset.groupby(['userId'])
-
-    correlations = pearson_correlations(targetUserRatings, userSubset, moviesInCommonMinimum, correlationThreshold)
-    return correlations
+    return correlationsDF[correlationsDF['PearsonCorrelation'] > correlationThreshold]

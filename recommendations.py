@@ -5,10 +5,10 @@ import random
 import correlations
 import calculations
 
-# just for printouts
+# just for wide printouts
 pd.set_option('display.expand_frame_repr', False)
 
-NUMBER_OF_USERS = 5
+NUMBER_OF_USERS = 3
 CORRELATION_THRESHOLD = 0.7
 MOVIES_IN_COMMON_MINIMUM = 6
 
@@ -23,11 +23,8 @@ for i in range(0, NUMBER_OF_USERS):
     users.append(user)
     allUsers.remove(user)
 
-# calculate individual recommendation lists and add to a list
-recommendations = []
-for i in range(0,len(users)):
-    correlationsDF = correlations.similar_users(ratingsDF, users[i], MOVIES_IN_COMMON_MINIMUM, CORRELATION_THRESHOLD)
-    recommendations.append(calculations.calculate_recommendations(ratingsDF, correlationsDF, users[i]))
+# calculate individial recommendation lists (list of dataframes)
+recommendations = calculations.calculate_recommendations_all(ratingsDF, users, MOVIES_IN_COMMON_MINIMUM, CORRELATION_THRESHOLD)
 
 ### Compare sequential hybrid aggregation method and sequential modified average aggregation
 # PARAMETERS
@@ -46,7 +43,7 @@ ratingScale.sort()
 # scale of ratings = tuple of (lowest rating, highest rating)
 ratingScale = (ratingScale[0], ratingScale[len(ratingScale) - 1])
 
-RECOMMENDATION_ROUNDS = 15
+RECOMMENDATION_ROUNDS = 5
 groupSatOHybrid = []
 groupDisOHybrid = []
 groupSatOModifiedAggregation = []
