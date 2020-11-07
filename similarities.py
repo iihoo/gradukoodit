@@ -58,13 +58,13 @@ def pearson_correlations(targetUserRatings, ratingSubsetFiltered, correlationThr
         pearsonCorrelationDict[candidateUserId] = correlationValue
         
     # create a correlation dataframe
-    correlationsDF = pd.DataFrame.from_dict(pearsonCorrelationDict, orient='index')
-    correlationsDF.columns = ['PearsonCorrelation']
-    correlationsDF['userId'] = correlationsDF.index
-    correlationsDF.index = range(len(correlationsDF))
+    correlations = pd.DataFrame.from_dict(pearsonCorrelationDict, orient='index')
+    correlations.columns = ['PearsonCorrelation']
+    correlations['userId'] = correlations.index
+    correlations.index = range(len(correlations))
 
     # filter out those users, that do not have a correlation value higher than the threshold and sort in descending order
-    correlationsDF = correlationsDF[correlationsDF['PearsonCorrelation'] > correlationThreshold]
-    correlationsDF.sort_values(by='PearsonCorrelation', ascending=False, inplace=True)
+    correlations = correlations[correlations['PearsonCorrelation'] > correlationThreshold]
+    correlations.sort_values(by='PearsonCorrelation', ascending=False, inplace=True)
 
-    return correlationsDF
+    return correlations
