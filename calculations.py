@@ -1,38 +1,39 @@
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
+
 from itertools import combinations
 
-import correlations
+import similarities
 
-def calculate_recommendations_all(ratingsDF, users, MOVIES_IN_COMMON_MINIMUM, CORRELATION_THRESHOLD):
+def calculate_recommendations_all(ratings, scaler, users, MOVIES_IN_COMMON_MINIMUM, CORRELATION_THRESHOLD):
     """
     Calculates individual recommendation lists for users 'users'.
 
     Returns a list of individual recommendation lists (list of dataframes).
     """
     # calculate average rating for each user, and rename column
-    average = ratingsDF.groupby('userId').mean().rename(columns={'rating':'average rating, user'})['average rating, user']
+    average = ratings.groupby('userId').mean().rename(columns={'rating':'average rating, user'})['average rating, user']
 
     # calculate individual recommendation lists and add to a list
     recommendations = []
     for i in range(0, len(users)):
-        correlationsDF = correlations.similar_users(ratingsDF, users[i], MOVIES_IN_COMMON_MINIMUM, CORRELATION_THRESHOLD)
-        recommendations.append(calculate_recommendations_single(ratingsDF, average, correlationsDF, users[i]))
+        correlations = similarities.similar_users(ratings, users[i], MOVIES_IN_COMMON_MINIMUM, CORRELATION_THRESHOLD)
+        recommendations.append(calculate_recommendations_single(ratings, scaler, average, correlations, users[i]))
     return recommendations
 
-def calculate_recommendations_single(ratingsDF, average, correlationsDF, userId):
+def calculate_recommendations_single(ratings, scaler, average, correlations, userId):
     """
     Calculates a recommendation list for a user (userId).
 
-    Returns a dataframe (recommendation list).
-
     Prediction function: 
-    pred(a,p) = average(r_a) + sum( sim(a,b)*(r_b,p - average(r_b)) ) / sum(sim(a,b))
+    prediction(a,p) = average(r_a) + sum( similarity(a,b)*(r_b,p - average(r_b)) ) / sum(similarity(a,b))
+
+    Parameter 'scaler' is a MinMaxScaler that is used to scale ratings according to the original rating data.
+
+    Returns a dataframe (recommendation list).
     """
 
     # merge correlation values to ratings 
-    df = correlationsDF.merge(
-        ratingsDF, left_on='userId', right_on='userId', how='inner')
+    df = correlations.merge(ratings, left_on='userId', right_on='userId', how='inner')
    
     # merge average ratings to ratings
     df = df.merge(average, left_on='userId', right_on='userId', how='inner')
@@ -40,96 +41,58 @@ def calculate_recommendations_single(ratingsDF, average, correlationsDF, userId)
     # calculate adjusted ratings and add it as a column
     df['adjusted rating'] = df['PearsonCorrelation'] * (df['rating'] - df['average rating, user'])
 
-    # Applies a sum to the topUsers after grouping it up by userId
-    # group by movieId and calculate sum columns 'PearsonCorrelation', 'weighted rating'
-    tempValuesDF = df.groupby('movieId').sum()[
-        ['PearsonCorrelation', 'adjusted rating']]
+    # Create a temporary dataframe, group by movieId and calculate sum of columns 'PearsonCorrelation', 'weighted rating'
+    df_temp = df.groupby('movieId').sum()[['PearsonCorrelation', 'adjusted rating']]
 
     # rename columns
-    tempValuesDF.columns = ['sum_PearsonCorr', 'sum_adjusted_rating']
-    tempValuesDF['sum_adjusted_rating / sum_PearsonCorr'] = tempValuesDF['sum_adjusted_rating'] / tempValuesDF['sum_PearsonCorr']
+    df_temp.columns = ['sum_PearsonCorr', 'sum_adjusted_rating']
+
+    # calculate and add a column for sum of adjusted ratings divided by sum of correlation values
+    df_temp['sum_adjusted_rating / sum_PearsonCorr'] = df_temp['sum_adjusted_rating'] / df_temp['sum_PearsonCorr']
 
     # create a recommendation dataframe
-    recommendationDF = pd.DataFrame()
-    recommendationDF['recommendation score'] = average[userId] + ( tempValuesDF['sum_adjusted_rating'] / tempValuesDF['sum_PearsonCorr'] )
-    recommendationDF['movieId'] = tempValuesDF.index
-    recommendationDf = recommendationDF.sort_values(by='recommendation score', ascending=False, inplace=True)
-
-    # get scale of ratings
-    ratingScale = ratingsDF['rating'].unique()
-    ratingScale.sort()
-    ratingScale = (ratingScale[0], ratingScale[len(ratingScale) - 1])
-    scaler = MinMaxScaler(feature_range=(ratingScale))
+    df_recommendation = pd.DataFrame()
+    df_recommendation['recommendation score'] = average[userId] + ( df_temp['sum_adjusted_rating'] / df_temp['sum_PearsonCorr'] )
+    df_recommendation['movieId'] = df_temp.index
 
     # scale ratings to linear scale using original rating scale from ratings data
-    recommendationDF['prediction for user ' + str(userId)] = scaler.fit_transform(recommendationDF['recommendation score'].values.reshape(-1,1))
+    df_recommendation['prediction for user ' + str(userId)] = scaler.fit_transform(df_recommendation['recommendation score'].values.reshape(-1,1))
 
-    return recommendationDF
-
-def calculate_group_recommendation_list(recommendationLists, aggregationMethod):
-    """
-    Assembles a group recommendation list from individual users' recommendation lists.
-
-    Aggregation method = 'least misery' or 'average'.
-
-    Returns a dataframe (group recommendation list).
-    """
-    tempGroupRecommendationDF = recommendationLists[0]
-    
-    for i in range(1, len(recommendationLists)):
-        tempGroupRecommendationDF = tempGroupRecommendationDF.merge(recommendationLists[i], left_on='movieId', right_on='movieId', how='outer', suffixes=(i - 1, i))
-
-    columns = [col for col in tempGroupRecommendationDF.columns if 'prediction' in col or col == 'movieId']
-    groupRecommendationDF = tempGroupRecommendationDF[columns]
-
-    # remove rows with NaN values
-    # in other words: we only consider the movies, that have a predicted score for each user in the group
-    groupRecommendationDF = groupRecommendationDF.dropna()
-
-    # calculate the average score, and add new column
-    groupRecommendationDF.insert(1, 'average', groupRecommendationDF.iloc[:, 1:].mean(axis=1))
-    #groupListSorted = groupRecommendationDF.sort_values(by=['average'], ascending=False)
-
-    # calculate the least misery score, and add new column
-    groupRecommendationDF.insert(2, 'least misery', groupRecommendationDF.iloc[:, 2:].min(axis=1))
-    #groupListSorted = groupRecommendationDF.sort_values(by=['least misery'], ascending=False)
-
-    groupRecommendationDF.insert(1, 'result', groupRecommendationDF[aggregationMethod])
-    groupListSorted = groupRecommendationDF.sort_values(by=['result'], ascending=False)
-
-    return groupListSorted
+    return df_recommendation
 
 def calculate_group_recommendation_list_hybrid(recommendationLists, alfa):
     """
     Assembles a group recommendation list from individual users' recommendation lists.
 
+    Parameter alfa = max satisfaction score - min satisfaction score, from the previous round (alfa = 0 in the first round).
+
     Returns a dataframe (group recommendation list).
     """
-    tempGroupRecommendationDF = recommendationLists[0]
-    
+    # create a temporary dataframe and add individual recommendation lists one by one
+    df_temp = recommendationLists[0]
     for i in range(1, len(recommendationLists)):
-        tempGroupRecommendationDF = tempGroupRecommendationDF.merge(recommendationLists[i], left_on='movieId', right_on='movieId', how='outer', suffixes=(i - 1, i))
+        df_temp = df_temp.merge(recommendationLists[i], left_on='movieId', right_on='movieId', how='outer', suffixes=(i - 1, i))
 
-    columns = [col for col in tempGroupRecommendationDF.columns if 'prediction' in col or col == 'movieId']
-    groupRecommendationDF = tempGroupRecommendationDF[columns]
+    columns = [col for col in df_temp.columns if 'prediction' in col or col == 'movieId']
+    df_group_recommendation = df_temp[columns]
 
-    # remove rows with NaN values
-    # in other words: we only consider the movies, that have a predicted score for each user in the group
-    groupRecommendationDF = groupRecommendationDF.dropna()
+    # remove rows with NaN values: only keep the movies, that have a predicted score for each user in the group
+    df_group_recommendation = df_group_recommendation.dropna()
 
     # calculate the average score, and add new column
-    groupRecommendationDF.insert(1, 'average', groupRecommendationDF.iloc[:, 1:].mean(axis=1))
+    df_group_recommendation.insert(1, 'average', df_group_recommendation.iloc[:, 1:].mean(axis=1))
 
     # calculate the least misery score, and add new column
-    groupRecommendationDF.insert(2, 'least misery', groupRecommendationDF.iloc[:, 2:].min(axis=1))
+    df_group_recommendation.insert(2, 'least misery', df_group_recommendation.iloc[:, 2:].min(axis=1))
 
-    # alfa = max satisfaction score - min satisfaction score, from the previous round
-    groupRecommendationDF.insert(1, 'result', (1 - alfa) * groupRecommendationDF['average'] + alfa * groupRecommendationDF['least misery'])
+    # calculate the hybrid score, and add new column
+    df_group_recommendation.insert(1, 'result', (1 - alfa) * df_group_recommendation['average'] + alfa * df_group_recommendation['least misery'])
 
-    groupListSorted = groupRecommendationDF.sort_values(by=['result'], ascending=False)
-    return groupListSorted
+    # sort group recommendation list based on the predicted rating for the group, in descending order
+    df_sorted = df_group_recommendation.sort_values(by=['result'], ascending=False)
+    return df_sorted
 
-def calculate_group_recommendation_list_modified_average_aggregation(recommendationLists, satisfactionScores, ratingScale):
+def calculate_group_recommendation_list_modified_average_aggregation(recommendationLists, satisfactionScores, scaler):
     """
     Assembles a group recommendation list from individual users' recommendation lists.
 
@@ -188,7 +151,6 @@ def calculate_group_recommendation_list_modified_average_aggregation(recommendat
     adjustedRatings.insert(1, 'modified average', adjustedRatings.iloc[:, 2:].mean(axis=1))
 
     # scale ratings
-    scaler = MinMaxScaler(feature_range=(ratingScale))
     adjustedRatings.insert(1, 'modified average, scaled', scaler.fit_transform(adjustedRatings['modified average'].values.reshape(-1,1)))
     
     adjustedRatingsSorted = adjustedRatings.sort_values(by=['modified average, scaled'], ascending=False)
