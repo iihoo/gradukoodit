@@ -45,13 +45,9 @@ alfa = 0
 satisfactionModifiedAggregation = {u:1 for u in users}
 
 RECOMMENDATION_ROUNDS = 5
-groupSatOHybrid = []
-groupDisOHybrid = []
-groupSatOModifiedAggregation = []
-groupDisOModifiedAggregation = []
 
-groupDisOHybrid2 = []
-groupDisOModifiedAggregation2 = []
+# create a DataFrame for satisfaction & dissatisfaction scores
+df_scores = pd.DataFrame(columns=['GroupSatO:HYBRID', 'GroupSatO:MODIF.AGGR.', 'GroupDisO:HYBRID', 'GroupDisO:MODIF.AGGR.'])
 
 # simulate recommendation rounds
 for i in range(1, RECOMMENDATION_ROUNDS + 1):
@@ -67,36 +63,22 @@ for i in range(1, RECOMMENDATION_ROUNDS + 1):
 
     alfa = max(list(satisfactionHybrid.values())) - min(list(satisfactionHybrid.values()))
 
+    # calculate the average satisfaction scores from this round
     groupSatHybrid = sum(satisfactionHybrid.values()) / len(satisfactionHybrid)
-    groupSatOHybrid.append(groupSatHybrid)
-    groupDisHybrid = max(satisfactionHybrid.values()) - min(satisfactionHybrid.values())
-    groupDisOHybrid.append(groupDisHybrid)
-
     groupSatModifiedAggregation = sum(satisfactionModifiedAggregation.values()) / len(satisfactionModifiedAggregation)
-    groupSatOModifiedAggregation.append(groupSatModifiedAggregation)
+
+    # calculate the dissatisfaction scores from this round
+    groupDisHybrid = max(satisfactionHybrid.values()) - min(satisfactionHybrid.values())
     groupDisModifiedAggregation = max(satisfactionModifiedAggregation.values()) - min(satisfactionModifiedAggregation.values())
-    groupDisOModifiedAggregation.append(groupDisModifiedAggregation)
 
-    # try also the average of all pairwise disagreements as the dissatisfaction measure
-    groupDisOHybrid2.append(calculations.calculate_average_of_all_pairwise_differences(satisfactionHybrid))
-    groupDisOModifiedAggregation2.append(calculations.calculate_average_of_all_pairwise_differences(satisfactionModifiedAggregation))
+    # add to results dataframe
+    df_scores.loc[i] = [groupSatHybrid, groupSatModifiedAggregation, groupDisHybrid, groupDisModifiedAggregation]
 
-    print('Results, hybrid aggregation:')
-    print(groupListHybrid)
-    print('Results, modified aggregation:')
-    print(groupListModifiedAggregation)
-
-
-    print(f'\nSatisfaction scores after round {i}')
-    print('Hybrid:')
-    [print(key, round(value, 4)) for key, value in satisfactionHybrid.items()]
-    print(f'GroupSatO: {groupSatHybrid:.4f}')
-    print(f'GroupDisO: {groupDisHybrid:.4f}')
-    
-    print('\nModified:')
-    [print(key, round(value, 4)) for key, value in satisfactionModifiedAggregation.items()]
-    print(f'GroupSatO: {groupSatModifiedAggregation:.4f}')
-    print(f'GroupDisO: {groupDisModifiedAggregation:.4f}')
+    # top-k results
+    print('\nResults, hybrid aggregation:')
+    print(groupListHybrid[:k])
+    print('\nResults, modified aggregation:')
+    print(groupListModifiedAggregation[:k])
 
     # remove top-k movies from both group recommendation lists
     moviesToBeRemoved1 = list(groupListHybrid['movieId'][:k])
@@ -107,31 +89,33 @@ for i in range(1, RECOMMENDATION_ROUNDS + 1):
         condition = ~recommendations[i].movieId.isin(moviesToBeRemoved)
         recommendations[i] = recommendations[i][condition]
 
+# calculate average of the average of group satisfaction scores
+groupSatOHybridAverage = df_scores['GroupSatO:HYBRID'].mean()
+groupSatOModifiedAggregationAverage = df_scores['GroupSatO:MODIF.AGGR.'].mean()
 
-groupSatOHybridAverage = sum(groupSatOHybrid) / len(groupSatOHybrid)
-groupDisOHybridAverage = sum(groupDisOHybrid) / len(groupDisOHybrid)
-groupSatOModifiedAggregationAverage = sum(groupSatOModifiedAggregation) / len(groupSatOModifiedAggregation)
-groupDisOModifiedAggregationAverage = sum(groupDisOModifiedAggregation) / len(groupDisOModifiedAggregation)
+# calculate average of the group dissatisfaction scores
+groupDisOHybridAverage = df_scores['GroupDisO:HYBRID'].mean()
+groupDisOModifiedAggregationAverage = df_scores['GroupDisO:MODIF.AGGR.'].mean()
+
 print(f'\nAfter {RECOMMENDATION_ROUNDS} recommendation rounds')
-print('HYBRID METHOD')
+
+print('Scores:')
+print(df_scores)
+
+print('\nHYBRID METHOD')
 print(f'GroupSatO: {groupSatOHybridAverage:.4f}')
 print(f'GroupDisO: {groupDisOHybridAverage:.4f}')
 print(f'F-score: {calculations.calculate_F_score(groupSatOHybridAverage, groupDisOHybridAverage):4f}')
-print(f'satisfaction scores for each roundd')
-print(groupSatOHybrid)
+print(f'satisfaction scores for each round')
+print(df_scores['GroupSatO:HYBRID'].to_numpy())
 print(f'dissatisfaction scores for each round')
-print(groupDisOHybrid)
-print('MODIFIED AVERAGE AGGREGATION METHOD')
+print(df_scores['GroupDisO:HYBRID'].to_numpy())
+
+print('\nMODIFIED AVERAGE AGGREGATION METHOD')
 print(f'GroupSatO: {groupSatOModifiedAggregationAverage:.4f}')
 print(f'GroupDisO: {groupDisOModifiedAggregationAverage:.4f}')
 print(f'F-score: {calculations.calculate_F_score(groupSatOModifiedAggregationAverage, groupDisOModifiedAggregationAverage):4f}')
-print(f'satisfaction scores for each roundd')
-print(groupSatOModifiedAggregation)
+print(f'satisfaction scores for each round')
+print(df_scores['GroupSatO:MODIF.AGGR.'].to_numpy())
 print(f'dissatisfaction scores for each round')
-print(groupDisOModifiedAggregation)
-
-
-groupDisOHybridAverage2 = sum(groupDisOHybrid2) / len(groupDisOHybrid2)
-groupDisOModifiedAggregationAverage2 = sum(groupDisOModifiedAggregation2) / len(groupDisOModifiedAggregation2)
-print(f'Hybrid: GroupDisO with average of all pairwise disagreements {groupDisOHybridAverage2}')
-print(f'Modified aggregation: GroupDisO with average of all pairwise disagreements {groupDisOModifiedAggregationAverage2}')
+print(df_scores['GroupDisO:MODIF.AGGR.'].to_numpy())
