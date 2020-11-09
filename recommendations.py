@@ -12,6 +12,7 @@ pd.set_option('display.expand_frame_repr', False)
 NUMBER_OF_USERS = 3
 CORRELATION_THRESHOLD = 0.7
 MOVIES_IN_COMMON_MINIMUM = 6
+RECOMMENDATION_ROUNDS = 5
 
 ratingsDF = pd.read_csv('movielens-small/ratings.csv')
 ratingsDF.drop(['timestamp'], axis=1, inplace=True)
@@ -34,7 +35,6 @@ for i in range(0, NUMBER_OF_USERS):
 recommendations = calculations.calculate_recommendations_all(ratingsDF, scaler, users, MOVIES_IN_COMMON_MINIMUM, CORRELATION_THRESHOLD)
 
 ### Compare sequential hybrid aggregation method and sequential modified average aggregation
-# PARAMETERS
 # top-k movies
 k = 10
 
@@ -43,8 +43,6 @@ alfa = 0
 
 # for the first round, initialize satisfaction score = 1, for each user (modified average aggregation)
 satisfactionModifiedAggregation = {u:1 for u in users}
-
-RECOMMENDATION_ROUNDS = 5
 
 # create a DataFrame for satisfaction & dissatisfaction scores
 df_scores = pd.DataFrame(columns=['GroupSatO:HYBRID', 'GroupSatO:MODIF.AGGR.', 'GroupDisO:HYBRID', 'GroupDisO:MODIF.AGGR.'])

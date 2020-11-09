@@ -56,7 +56,7 @@ def calculate_recommendations_single(ratings, scaler, average, correlations, use
     df_recommendation['movieId'] = df_temp.index
 
     # scale ratings to linear scale using original rating scale from ratings data
-    df_recommendation['prediction for user ' + str(userId)] = scaler.fit_transform(df_recommendation['recommendation score'].values.reshape(-1,1))
+    df_recommendation['predicted rating: user ' + str(userId)] = scaler.fit_transform(df_recommendation['recommendation score'].values.reshape(-1,1))
 
     return df_recommendation
 
@@ -73,7 +73,7 @@ def calculate_group_recommendation_list_hybrid(recommendationLists, alfa):
     for i in range(1, len(recommendationLists)):
         df_temp = df_temp.merge(recommendationLists[i], left_on='movieId', right_on='movieId', how='outer', suffixes=(i - 1, i))
 
-    columns = [col for col in df_temp.columns if 'prediction' in col or col == 'movieId']
+    columns = [col for col in df_temp.columns if 'predicted' in col or col == 'movieId']
     df_group_recommendation = df_temp[columns]
 
     # remove rows with NaN values: only keep the movies, that have a predicted score for each user in the group
@@ -101,19 +101,12 @@ def calculate_group_recommendation_list_modified_average_aggregation(recommendat
 
     Returns a dataframe (group recommendation list).
     """
-    # calculate the weighing factors for each user for modified average aggregation
-    satisfactionAverage = sum(satisfactionScores.values()) / len(satisfactionScores)
-
-    factors = {}
-    for user in satisfactionScores:
-        factors[user] = abs(satisfactionAverage - satisfactionScores[user])
-    
     # create a temporary dataframe and add individual recommendation lists one by one
     df_temp = recommendationLists[0]
     for i in range(1, len(recommendationLists)):
         df_temp = df_temp.merge(recommendationLists[i], left_on='movieId', right_on='movieId', how='outer', suffixes=(i - 1, i))
 
-    columns = [col for col in df_temp.columns if 'prediction' in col or col == 'movieId']
+    columns = [col for col in df_temp.columns if 'predicted' in col or col == 'movieId']
     df_group_recommendation = df_temp[columns]
 
     # remove rows with NaN values: only keep the movies, that have a predicted score for each user in the group
@@ -122,40 +115,41 @@ def calculate_group_recommendation_list_modified_average_aggregation(recommendat
     # calculate the average score, and add new column
     df_group_recommendation.insert(1, 'average', df_group_recommendation.iloc[:, 1:].mean(axis=1))
 
-    ## rules for modified averaga aggregation:
+    # calculate the average satisfaction from previous round
+    satisfactionAverage = sum(satisfactionScores.values()) / len(satisfactionScores)
+
+    ## rules for modified average aggregation:
     # if r_u > avg_r and sat_u > avg_sat, then w = 1 - f_u
     # if r_u > avg_r and sat_u < avg_sat, then w = 1 + f_u
     # if r_u < avg_r and sat_u > avg_sat, then w = 1 + f_u
     # if r_u < avg_r and sat_u < avg_sat, then w = 1 - f_u
     df_adjusted_ratings = pd.DataFrame(df_group_recommendation[['movieId', 'average']])
-    for user in satisfactionScores:
-        df_adjusted_ratings[str(user)] = df_group_recommendation['prediction for user ' + str(user)]
-        df_adjusted_ratings['prediction for user ' + str(user)] = df_adjusted_ratings[str(user)]
+    for userId in satisfactionScores:
 
-        condition = df_adjusted_ratings[str(user)] > df_adjusted_ratings['average']
+        # calculate the difference between user's satisfaction compared to the average satisfaction
+        factor = abs(satisfactionAverage - satisfactionScores[userId])
+
+        df_adjusted_ratings['predicted rating: user ' + str(userId)] = df_group_recommendation['predicted rating: user ' + str(userId)]
+        df_adjusted_ratings['adjusted rating: user ' + str(userId)] = df_adjusted_ratings['predicted rating: user ' + str(userId)]
+
+        condition = df_adjusted_ratings['predicted rating: user ' + str(userId)] > df_adjusted_ratings['average']
         
         # condition: r_u > avg_r:
         # r_adj = (1 - f_u) * r OR (1 + f_u) * r
-        #df_adjusted_ratings['prediction for user ' + str(user)][condition] = df_adjusted_ratings['prediction for user ' + str(user)][condition].apply(lambda r: r * (1 - factors[user]) if (satisfactionScores[user] > satisfactionAverage) else r * (1 + factors[user]))
-        df_adjusted_ratings.loc[condition, 'prediction for user ' + str(user)] = df_adjusted_ratings.loc[condition, 'prediction for user ' + str(user)].apply(lambda r: r * (1 - factors[user]) if (satisfactionScores[user] > satisfactionAverage) else r * (1 + factors[user]))
+        df_adjusted_ratings.loc[condition, 'adjusted rating: user ' + str(userId)] = df_adjusted_ratings.loc[condition, 'adjusted rating: user ' + str(userId)].apply(lambda r: r * (1 - factor) if (satisfactionScores[userId] > satisfactionAverage) else r * (1 + factor))
 
         # condition: r_u < avg_r
         # r_adj = (1 + f_u) * r OR (1 - f_u) * r
-        #df_adjusted_ratings['prediction for user ' + str(user)][~condition] = df_adjusted_ratings['prediction for user ' + str(user)][~condition].apply(lambda r: r * (1 + factors[user]) if (satisfactionScores[user] > satisfactionAverage) else r * (1 - factors[user]))
-        df_adjusted_ratings.loc[~condition, 'prediction for user ' + str(user)].apply(lambda r: r * (1 + factors[user]) if (satisfactionScores[user] > satisfactionAverage) else r * (1 - factors[user]))
+        df_adjusted_ratings.loc[~condition, 'adjusted rating: user ' + str(userId)].apply(lambda r: r * (1 + factor) if (satisfactionScores[userId] > satisfactionAverage) else r * (1 - factor))
     
         ### NOTE what if r_u == avg_r OR sat_u == avg_sat??
 
-        #df_adjusted_ratings.drop([str(user)], axis=1, inplace=True)
-
     # calculate average of the adjusted predictions and add new column
-    df_adjusted_ratings.insert(1, 'modified average', df_adjusted_ratings.iloc[:, 2:].mean(axis=1))
-
-    # scale ratings
-    df_adjusted_ratings.insert(1, 'modified average, scaled', scaler.fit_transform(df_adjusted_ratings['modified average'].values.reshape(-1,1)))
+    adjusted = [column for column in df_adjusted_ratings.columns if 'adjusted rating' in column]
+    df_adjusted_ratings.insert(1, 'modified average', df_adjusted_ratings[adjusted].mean(axis=1))
     
-    # sort group recommendation list based on the predicted rating for the group, in descending order
-    df_adjusted_ratings.sort_values(by='modified average, scaled', ascending=False, inplace=True)
+    # sort ratings
+    df_adjusted_ratings.sort_values(by='modified average', ascending=False, inplace=True)
 
     return df_adjusted_ratings
 
@@ -172,10 +166,11 @@ def calculate_satisfaction(df_group_recommendation, users, k):
     satisfaction = {}
     for i in range(0, len(users)):
         user = users[i]
-        column = [col for col in df_group_recommendation.columns if col == 'prediction for user ' + str(user)]
+        column = [col for col in df_group_recommendation.columns if col == 'predicted rating: user ' + str(user)]
         predictedScoreSumGroupList = df_group_recommendation[column][:k].sum().array[0]
         predictedScoreSumOwnList = df_group_recommendation[column].sort_values(by=column[0], ascending=False)[:k].sum().array[0]
         satisfaction[user] = predictedScoreSumGroupList / predictedScoreSumOwnList
+
     return satisfaction
 
 def calculate_F_score(groupSatOAverage, groupDisOAverage):
