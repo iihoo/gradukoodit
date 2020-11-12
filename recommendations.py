@@ -14,26 +14,29 @@ NUMBER_OF_USERS = 3
 CORRELATION_THRESHOLD = 0.7
 MOVIES_IN_COMMON_MINIMUM = 6
 RECOMMENDATION_ROUNDS = 5
+INITIAL_DATA_CHUNK_SIZE = 100000
 
-ratingsDF = pd.read_csv('movielens-small/ratings.csv')
-ratingsDF.drop(['timestamp'], axis=1, inplace=True)
+
+# get initial data chunk 
+initialRatingsDataChunk = pd.read_csv('movielens-25m/ratings.csv', usecols=['userId', 'movieId', 'rating'], chunksize=INITIAL_DATA_CHUNK_SIZE)
+df_ratings_initial_chunk = initialRatingsDataChunk.get_chunk()
 
 # get scale of ratings
-ratingScale = ratingsDF['rating'].unique()
+ratingScale = df_ratings_initial_chunk['rating'].unique()
 ratingScale.sort()
 ratingScale = (ratingScale[0], ratingScale[len(ratingScale) - 1])
 scaler = MinMaxScaler(feature_range=(ratingScale))
 
 # pick random users
-allUsers = ratingsDF['userId'].unique().tolist()
+allUsers = df_ratings_initial_chunk['userId'].unique().tolist()
 users = []
 for i in range(0, NUMBER_OF_USERS):
     user = random.choice(allUsers)
     users.append(user)
     allUsers.remove(user)
 
-# calculate individial recommendation lists (list of dataframes)
-recommendations = calculations.calculate_recommendations_all(ratingsDF, scaler, users, MOVIES_IN_COMMON_MINIMUM, CORRELATION_THRESHOLD)
+# calculate individial recommendation lists (a dict, where userId is the key and the recommendation list for that user is the dict value)
+recommendations = calculations.calculate_recommendations_all(df_ratings_initial_chunk, scaler, users, MOVIES_IN_COMMON_MINIMUM, CORRELATION_THRESHOLD)
 
 ### Compare sequential hybrid aggregation method and sequential modified average aggregation
 # top-k movies
@@ -53,12 +56,17 @@ for i in range(1, RECOMMENDATION_ROUNDS + 1):
     print('\n**********************************************************************************************************************************')
     print(f'ROUND {i}')
 
-    groupListHybrid = calculations.calculate_group_recommendation_list_hybrid(recommendations, alfa)
-    groupListModifiedAggregation = calculations.calculate_group_recommendation_list_modified_average_aggregation(recommendations, satisfactionModifiedAggregation, scaler)
+    groupListHybrid = calculations.calculate_group_recommendation_list_hybrid(users, recommendations, alfa)
+    groupListModifiedAggregation = calculations.calculate_group_recommendation_list_modified_average_aggregation(users, recommendations, satisfactionModifiedAggregation, scaler)
 
     # calculate satisfaction scores, use only top-k items in the group recommendation list
     satisfactionHybrid = calculations.calculate_satisfaction(groupListHybrid, users, k)
     satisfactionModifiedAggregation = calculations.calculate_satisfaction(groupListModifiedAggregation, users, k)
+
+    # try to make satisfaction calculations more efficient
+    # NOTE try to calculate 
+    #satisfactionHybridTest = calculations.calculate_satisfaction_test(groupListHybrid, users, recommendations, k)
+    #satisfactionModifiedAggregationTest = calculations.calculate_satisfaction_test(groupListModifiedAggregation, recommendations, users, k)
 
     alfa = max(list(satisfactionHybrid.values())) - min(list(satisfactionHybrid.values()))
 
@@ -84,9 +92,9 @@ for i in range(1, RECOMMENDATION_ROUNDS + 1):
     moviesToBeRemoved2 = list(groupListModifiedAggregation['movieId'][:k])
     moviesToBeRemoved = moviesToBeRemoved1 + moviesToBeRemoved2
     # remove from the users' recommendation list
-    for i in range(0,len(recommendations)):
-        condition = ~recommendations[i].movieId.isin(moviesToBeRemoved)
-        recommendations[i] = recommendations[i][condition]
+    for i in range(0,len(users)):
+        condition = ~recommendations[users[i]].movieId.isin(moviesToBeRemoved)
+        recommendations[i] = recommendations[users[i]][condition]
 
 # calculate average of the average of group satisfaction scores
 groupSatOHybridAverage = df_scores['GroupSatO:HYBRID'].mean()

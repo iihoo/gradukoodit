@@ -8,16 +8,16 @@ def calculate_recommendations_all(ratings, scaler, users, MOVIES_IN_COMMON_MINIM
     """
     Calculates individual recommendation lists for users 'users'.
 
-    Returns a list of individual recommendation lists (list of dataframes).
+    Returns individual recommendation lists as a dict, where userId is the dict key.
     """
     # calculate average rating for each user, and rename column
     average = ratings.groupby('userId').mean().rename(columns={'rating':'average rating, user'})['average rating, user']
 
-    # calculate individual recommendation lists and add to a list
-    recommendations = []
+    # calculate individual recommendation lists and add to a dict
+    recommendations = {}
     for i in range(0, len(users)):
         correlations = similarities.similar_users(ratings, users[i], MOVIES_IN_COMMON_MINIMUM, CORRELATION_THRESHOLD)
-        recommendations.append(calculate_recommendations_single(ratings, scaler, average, correlations, users[i]))
+        recommendations[users[i]] = calculate_recommendations_single(ratings, scaler, average, correlations, users[i])
     return recommendations
 
 def calculate_recommendations_single(ratings, scaler, average, correlations, userId):
@@ -31,7 +31,6 @@ def calculate_recommendations_single(ratings, scaler, average, correlations, use
 
     Returns a dataframe (recommendation list).
     """
-
     # merge correlation values to ratings 
     df = correlations.merge(ratings, left_on='userId', right_on='userId', how='inner')
    
@@ -52,7 +51,7 @@ def calculate_recommendations_single(ratings, scaler, average, correlations, use
 
     # create a recommendation dataframe
     df_recommendation = pd.DataFrame()
-    df_recommendation['recommendation score'] = average[userId] + ( df_temp['sum_adjusted_rating'] / df_temp['sum_PearsonCorr'] )
+    df_recommendation['recommendation score'] = average[userId] + df_temp['sum_adjusted_rating / sum_PearsonCorr']
     df_recommendation['movieId'] = df_temp.index
 
     # scale ratings to linear scale using original rating scale from ratings data
@@ -60,7 +59,7 @@ def calculate_recommendations_single(ratings, scaler, average, correlations, use
 
     return df_recommendation
 
-def calculate_group_recommendation_list_hybrid(recommendationLists, alfa):
+def calculate_group_recommendation_list_hybrid(users, recommendationListsDict, alfa):
     """
     Assembles a group recommendation list from individual users' recommendation lists.
 
@@ -69,9 +68,10 @@ def calculate_group_recommendation_list_hybrid(recommendationLists, alfa):
     Returns a dataframe (group recommendation list).
     """
     # create a temporary dataframe and add individual recommendation lists one by one
-    df_temp = recommendationLists[0]
-    for i in range(1, len(recommendationLists)):
-        df_temp = df_temp.merge(recommendationLists[i], left_on='movieId', right_on='movieId', how='outer', suffixes=(i - 1, i))
+    df_temp = recommendationListsDict[users[0]]
+    for i in range(1, len(users)):
+        user = users[i]
+        df_temp = df_temp.merge(recommendationListsDict[user], left_on='movieId', right_on='movieId', how='outer', suffixes=(i - 1, i))
 
     columns = [col for col in df_temp.columns if 'predicted' in col or col == 'movieId']
     df_group_recommendation = df_temp[columns]
@@ -93,7 +93,7 @@ def calculate_group_recommendation_list_hybrid(recommendationLists, alfa):
 
     return df_group_recommendation
 
-def calculate_group_recommendation_list_modified_average_aggregation(recommendationLists, satisfactionScores, scaler):
+def calculate_group_recommendation_list_modified_average_aggregation(users, recommendationListsDict, satisfactionScores, scaler):
     """
     Assembles a group recommendation list from individual users' recommendation lists.
 
@@ -102,9 +102,10 @@ def calculate_group_recommendation_list_modified_average_aggregation(recommendat
     Returns a dataframe (group recommendation list).
     """
     # create a temporary dataframe and add individual recommendation lists one by one
-    df_temp = recommendationLists[0]
-    for i in range(1, len(recommendationLists)):
-        df_temp = df_temp.merge(recommendationLists[i], left_on='movieId', right_on='movieId', how='outer', suffixes=(i - 1, i))
+    df_temp = recommendationListsDict[users[0]]
+    for i in range(1, len(users)):
+        user = users[i]
+        df_temp = df_temp.merge(recommendationListsDict[user], left_on='movieId', right_on='movieId', how='outer', suffixes=(i - 1, i))
 
     columns = [col for col in df_temp.columns if 'predicted' in col or col == 'movieId']
     df_group_recommendation = df_temp[columns]
@@ -171,6 +172,11 @@ def calculate_satisfaction(df_group_recommendation, users, k):
         predictedScoreSumOwnList = df_group_recommendation[column].sort_values(by=column[0], ascending=False)[:k].sum().array[0]
         satisfaction[user] = predictedScoreSumGroupList / predictedScoreSumOwnList
 
+    return satisfaction
+
+# NOTE calculate UserListSat from the user's individual recommendation list!
+def calculate_satisfaction_test(df_group_recommendation, users, recommendations, k):
+    satisfaction = {}
     return satisfaction
 
 def calculate_F_score(groupSatOAverage, groupDisOAverage):
