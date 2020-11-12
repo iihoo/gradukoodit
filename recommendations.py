@@ -5,6 +5,7 @@ import random
 from sklearn.preprocessing import MinMaxScaler
 
 import calculations
+import visualization
 
 # just for wide printouts
 pd.set_option('display.expand_frame_repr', False)
@@ -117,3 +118,6 @@ print(f'satisfaction scores for each round')
 print(df_scores['GroupSatO:MODIF.AGGR.'].to_numpy())
 print(f'dissatisfaction scores for each round')
 print(df_scores['GroupDisO:MODIF.AGGR.'].to_numpy())
+
+### PLOT RESULTS
+visualization.plot_satisfaction_dissatisfaction(df_scores)
