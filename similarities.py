@@ -12,13 +12,14 @@ def similar_users(ratings, userId, moviesInCommonMinimum, correlationThreshold):
     targetUserRatings = ratings[ratings['userId'] == userId]
 
     # get subset of ratings, that only include movies that the target user (userId) has also rated
-    condition1 = ratings['userId'] != userId
-    condition2 = ratings['movieId'].isin(targetUserRatings['movieId'].tolist())
-    ratingSubset = ratings[condition1 & condition2]
+    userCondition = ratings['userId'] != userId
+    movieCondition = ratings['movieId'].isin(targetUserRatings['movieId'].tolist())
+    ratingSubset = ratings[userCondition & movieCondition]
 
     # filter users that do not have rated more than 'moviesInCommonMinimum' identical movies
     ratingSubsetFiltered = ratingSubset[ratingSubset['userId'].map(ratingSubset['userId'].value_counts()) > moviesInCommonMinimum]
-
+   
+    # group by users
     ratingSubsetFiltered = ratingSubsetFiltered.groupby(['userId'])
 
     # calculate Pearson correlation values
@@ -33,12 +34,12 @@ def pearson_correlations(targetUserRatings, ratingSubsetFiltered, correlationThr
     Returns a dataframe with columns PearsonCorrelation and userId, with correlation values higher than 'correlationThreshold'.
     """
     pearsonCorrelationDict = {}
+    targetUserRatingsAverage = targetUserRatings['rating'].mean()
 
     # calculate Pearson Correlation value for each candidate user one by one
     for candidateUserId, candidateUserRatings in ratingSubsetFiltered:
 
         candidateUserRatingsAverage = candidateUserRatings['rating'].mean()
-        targetUserRatingsAverage = targetUserRatings['rating'].mean()
 
         # merge
         merged = targetUserRatings.merge(candidateUserRatings, on='movieId', suffixes=('_target', '_candidate'))  
@@ -54,8 +55,9 @@ def pearson_correlations(targetUserRatings, ratingSubsetFiltered, correlationThr
         # if either part of denominator is 0, the correlation value is 0
         correlationValue = merged['temp'].sum() / ( (merged['temp2_target'].sum() ** 0.5) * (merged['temp2_candidate'].sum() ** 0.5) ) if merged['temp2_target'].sum() != 0 and merged['temp2_candidate'].sum() != 0 else 0
 
-        # save to dict
-        pearsonCorrelationDict[candidateUserId] = correlationValue
+        # save to dict, if correlation value is higher than the threshold 
+        if correlationValue > correlationThreshold:
+            pearsonCorrelationDict[candidateUserId] = correlationValue
         
     # create a correlation dataframe
     correlations = pd.DataFrame.from_dict(pearsonCorrelationDict, orient='index')
@@ -63,8 +65,7 @@ def pearson_correlations(targetUserRatings, ratingSubsetFiltered, correlationThr
     correlations['userId'] = correlations.index
     correlations.index = range(len(correlations))
 
-    # filter out those users, that do not have a correlation value higher than the threshold and sort in descending order
-    correlations = correlations[correlations['PearsonCorrelation'] > correlationThreshold]
+    # sort
     correlations.sort_values(by='PearsonCorrelation', ascending=False, inplace=True)
 
     return correlations
