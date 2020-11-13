@@ -81,15 +81,9 @@ for i in range(1, RECOMMENDATION_ROUNDS + 1):
     print('\nResults, modified aggregation:')
     print(groupListModifiedAggregation[:k])
 
-    #NOTE 
-    ## remove top-k movies from both group recommendation lists
-    #moviesToBeRemoved1 = list(groupListHybrid['movieId'][:k])
-    #moviesToBeRemoved2 = list(groupListModifiedAggregation['movieId'][:k])
-    #moviesToBeRemoved = moviesToBeRemoved1 + moviesToBeRemoved2
-    ## remove from the users' recommendation list
-    #for i in range(0,len(users)):
-    #    condition = ~recommendations[users[i]].movieId.isin(moviesToBeRemoved)
-    #    recommendations[i] = recommendations[users[i]][condition]
+    # remove top-k movies from both group recommendation lists
+    recommendations = calculations.remove_movies(recommendations, [groupListHybrid, groupListModifiedAggregation], k)
+    
 
 # calculate average of the average of group satisfaction scores
 groupSatOHybridAverage = df_scores['GroupSatO:HYBRID'].mean()
@@ -123,4 +117,4 @@ print(f'dissatisfaction scores for each round')
 print(df_scores['GroupDisO:MODIF.AGGR.'].to_numpy())
 
 ### PLOT RESULTS
-visualization.plot_satisfaction_dissatisfaction(df_scores)
+#visualization.plot_satisfaction_dissatisfaction(df_scores)

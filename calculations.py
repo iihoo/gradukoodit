@@ -170,6 +170,26 @@ def calculate_satisfaction(df_group_recommendation, recommendations, k):
         satisfaction[user] = groupListSatisfaction / userListSatisfaction
     return satisfaction
 
+def remove_movies(recommendations, listOfGroupRecommendationLists, k):
+    """
+    Remove movies (from individual users recommendation lists) that have already been recommended (top-k) in the group recommendation lists.
+
+    This method works also with multiple group recommendation methods (when comparing methods).
+    'listOfGroupRecommendationLists' is a list of group recommendation lists.
+
+    Returns modified individual recommendation lists (dict), where userId is the dict key, and individual recommendation list for that user is the dict value.
+    """
+    moviesToBeRemoved = set(listOfGroupRecommendationLists[0]['movieId'][:k])
+    for i in range(1, len(listOfGroupRecommendationLists)):
+        moviesToBeRemoved.update(listOfGroupRecommendationLists[i]['movieId'][:k])
+
+    # remove from the users' recommendation list
+    for user in recommendations.keys():
+        condition = ~recommendations[user].movieId.isin(moviesToBeRemoved)
+        recommendations[user] = recommendations[user][condition]
+
+    return recommendations
+
 def calculate_F_score(groupSatOAverage, groupDisOAverage):
     return 2 * (groupSatOAverage * (1 - groupDisOAverage)) / (groupSatOAverage + (1 - groupDisOAverage))
 
