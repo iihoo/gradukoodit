@@ -16,7 +16,6 @@ MOVIES_IN_COMMON_MINIMUM = 6
 RECOMMENDATION_ROUNDS = 5
 INITIAL_DATA_CHUNK_SIZE = 100000
 
-
 # get initial data chunk 
 initialRatingsDataChunk = pd.read_csv('movielens-25m/ratings.csv', usecols=['userId', 'movieId', 'rating'], chunksize=INITIAL_DATA_CHUNK_SIZE)
 df_ratings_initial_chunk = initialRatingsDataChunk.get_chunk()
@@ -56,17 +55,12 @@ for i in range(1, RECOMMENDATION_ROUNDS + 1):
     print('\n**********************************************************************************************************************************')
     print(f'ROUND {i}')
 
-    groupListHybrid = calculations.calculate_group_recommendation_list_hybrid(users, recommendations, alfa)
-    groupListModifiedAggregation = calculations.calculate_group_recommendation_list_modified_average_aggregation(users, recommendations, satisfactionModifiedAggregation, scaler)
+    groupListHybrid = calculations.calculate_group_recommendation_list_hybrid(recommendations, alfa)
+    groupListModifiedAggregation = calculations.calculate_group_recommendation_list_modified_average_aggregation(recommendations, satisfactionModifiedAggregation)
 
     # calculate satisfaction scores, use only top-k items in the group recommendation list
-    satisfactionHybrid = calculations.calculate_satisfaction(groupListHybrid, users, k)
-    satisfactionModifiedAggregation = calculations.calculate_satisfaction(groupListModifiedAggregation, users, k)
-
-    # try to make satisfaction calculations more efficient
-    # NOTE try to calculate 
-    #satisfactionHybridTest = calculations.calculate_satisfaction_test(groupListHybrid, users, recommendations, k)
-    #satisfactionModifiedAggregationTest = calculations.calculate_satisfaction_test(groupListModifiedAggregation, recommendations, users, k)
+    satisfactionHybrid = calculations.calculate_satisfaction(groupListHybrid, recommendations, k)
+    satisfactionModifiedAggregation = calculations.calculate_satisfaction(groupListModifiedAggregation, recommendations, k)
 
     alfa = max(list(satisfactionHybrid.values())) - min(list(satisfactionHybrid.values()))
 
@@ -87,14 +81,15 @@ for i in range(1, RECOMMENDATION_ROUNDS + 1):
     print('\nResults, modified aggregation:')
     print(groupListModifiedAggregation[:k])
 
-    # remove top-k movies from both group recommendation lists
-    moviesToBeRemoved1 = list(groupListHybrid['movieId'][:k])
-    moviesToBeRemoved2 = list(groupListModifiedAggregation['movieId'][:k])
-    moviesToBeRemoved = moviesToBeRemoved1 + moviesToBeRemoved2
-    # remove from the users' recommendation list
-    for i in range(0,len(users)):
-        condition = ~recommendations[users[i]].movieId.isin(moviesToBeRemoved)
-        recommendations[i] = recommendations[users[i]][condition]
+    #NOTE 
+    ## remove top-k movies from both group recommendation lists
+    #moviesToBeRemoved1 = list(groupListHybrid['movieId'][:k])
+    #moviesToBeRemoved2 = list(groupListModifiedAggregation['movieId'][:k])
+    #moviesToBeRemoved = moviesToBeRemoved1 + moviesToBeRemoved2
+    ## remove from the users' recommendation list
+    #for i in range(0,len(users)):
+    #    condition = ~recommendations[users[i]].movieId.isin(moviesToBeRemoved)
+    #    recommendations[i] = recommendations[users[i]][condition]
 
 # calculate average of the average of group satisfaction scores
 groupSatOHybridAverage = df_scores['GroupSatO:HYBRID'].mean()
