@@ -1,5 +1,6 @@
 import math
 import pandas as pd
+import numpy as np
 
 def similar_users(ratings, userId, moviesInCommonMinimum, correlationThreshold):
     """
@@ -23,11 +24,18 @@ def similar_users(ratings, userId, moviesInCommonMinimum, correlationThreshold):
     ratingSubsetFiltered = ratingSubsetFiltered.groupby(['userId'])
 
     # calculate Pearson correlation values
-    correlations = pearson_correlations(targetUserRatings, ratingSubsetFiltered, correlationThreshold)
+    correlations = pearson_correlations(targetUserRatings, ratingSubsetFiltered)
+
+    # filter correlation values that are NOT higher than the threshold
+    correlationThresholdCondition = correlations['PearsonCorrelation'] > correlationThreshold
+    correlations = correlations[correlationThresholdCondition]
+
+    # sort
+    correlations.sort_values(by='PearsonCorrelation', ascending=False, inplace=True)
 
     return correlations
 
-def pearson_correlations(targetUserRatings, ratingSubsetFiltered, correlationThreshold):
+def pearson_correlations(targetUserRatings, ratingSubsetFiltered):
     """
     Calculate Pearson Correlation value between the target user and candidate users.
 
@@ -54,10 +62,9 @@ def pearson_correlations(targetUserRatings, ratingSubsetFiltered, correlationThr
         # and calculate the Pearson correlation value
         # if either part of denominator is 0, the correlation value is 0
         correlationValue = merged['temp'].sum() / ( (merged['temp2_target'].sum() ** 0.5) * (merged['temp2_candidate'].sum() ** 0.5) ) if merged['temp2_target'].sum() != 0 and merged['temp2_candidate'].sum() != 0 else 0
-
-        # save to dict, if correlation value is higher than the threshold 
-        if correlationValue > correlationThreshold:
-            pearsonCorrelationDict[candidateUserId] = correlationValue
+        correlationValue = round(correlationValue, 3)
+        
+        pearsonCorrelationDict[candidateUserId] = correlationValue
         
     # create a correlation dataframe
     correlations = pd.DataFrame.from_dict(pearsonCorrelationDict, orient='index')
@@ -65,7 +72,39 @@ def pearson_correlations(targetUserRatings, ratingSubsetFiltered, correlationThr
     correlations['userId'] = correlations.index
     correlations.index = range(len(correlations))
 
-    # sort
-    correlations.sort_values(by='PearsonCorrelation', ascending=False, inplace=True)
-
+    # not sorted
     return correlations
+
+def calculate_group_similarity_matrix(users, df_ratings):
+    """
+    Calculate similarity matrix between users.
+    """
+    df_group_similarity = pd.DataFrame(index=users, columns=users)
+
+    for i in range(0,len(users) - 1):
+        targetUserRatings = df_ratings[df_ratings['userId'] == users[i]]
+
+        # get subset of ratings, that only include movies that the target user (userId) has also rated
+        userCondition = df_ratings['userId'].isin(users[(i + 1):])
+        movieCondition = df_ratings['movieId'].isin(targetUserRatings['movieId'].tolist())
+        ratingSubset = df_ratings[userCondition & movieCondition]
+   
+        # group by users
+        ratingSubset = ratingSubset.groupby(['userId'])
+
+        # calculate Pearson correlation values
+        correlations = pearson_correlations(targetUserRatings, ratingSubset)
+
+        # modify index and column
+        correlations.set_index('userId', inplace=True)
+        correlations.rename(columns={'PearsonCorrelation': users[i]}, inplace=True)
+
+        # fill null values in result dataframe with correlation values from correlations dataframe
+        df_group_similarity = df_group_similarity.combine_first(correlations)
+
+    df_group_similarity = df_group_similarity.combine_first(df_group_similarity.T)
+
+    return df_group_similarity
+
+
+

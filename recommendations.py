@@ -1,20 +1,24 @@
 import pandas as pd
 import numpy as np
 import random
+import time
 
 from sklearn.preprocessing import MinMaxScaler
 
 import calculations
+import similarities
 import visualization
 
 # just for wide printouts
 pd.set_option('display.expand_frame_repr', False)
 
-NUMBER_OF_USERS = 3
+NUMBER_OF_USERS = 5
 CORRELATION_THRESHOLD = 0.7
 MOVIES_IN_COMMON_MINIMUM = 6
 RECOMMENDATION_ROUNDS = 5
 INITIAL_DATA_CHUNK_SIZE = 100000
+
+start = time.time()
 
 # get initial data chunk 
 initialRatingsDataChunk = pd.read_csv('movielens-25m/ratings.csv', usecols=['userId', 'movieId', 'rating'], chunksize=INITIAL_DATA_CHUNK_SIZE)
@@ -34,10 +38,12 @@ for i in range(0, NUMBER_OF_USERS):
     users.append(user)
     allUsers.remove(user)
 
+# calculate similarities between group users
+df_group_similarity = similarities.calculate_group_similarity_matrix(users, df_ratings_initial_chunk)
+
 # calculate individial recommendation lists (a dict, where userId is the key and the recommendation list for that user is the dict value)
 recommendations = calculations.calculate_recommendations_all(df_ratings_initial_chunk, scaler, users, MOVIES_IN_COMMON_MINIMUM, CORRELATION_THRESHOLD)
 
-### Compare sequential hybrid aggregation method and sequential modified average aggregation
 # top-k movies
 k = 10
 
@@ -48,13 +54,14 @@ alfa = 0
 satisfactionModifiedAggregation = {u:1 for u in users}
 
 # create a DataFrame for satisfaction & dissatisfaction scores
-df_scores = pd.DataFrame(columns=['GroupSatO:HYBRID', 'GroupSatO:MODIF.AGGR.', 'GroupDisO:HYBRID', 'GroupDisO:MODIF.AGGR.'])
+df_scores = pd.DataFrame(columns=['GroupSat:HYBRID', 'GroupSat:MODIF.AGGR.', 'GroupDis:HYBRID', 'GroupDis:MODIF.AGGR.'])
 
 # simulate recommendation rounds
 for i in range(1, RECOMMENDATION_ROUNDS + 1):
     print('\n**********************************************************************************************************************************')
     print(f'ROUND {i}')
 
+    # calculate group recommendation list(s)
     groupListHybrid = calculations.calculate_group_recommendation_list_hybrid(recommendations, alfa)
     groupListModifiedAggregation = calculations.calculate_group_recommendation_list_modified_average_aggregation(recommendations, satisfactionModifiedAggregation)
 
@@ -62,6 +69,7 @@ for i in range(1, RECOMMENDATION_ROUNDS + 1):
     satisfactionHybrid = calculations.calculate_satisfaction(groupListHybrid, recommendations, k)
     satisfactionModifiedAggregation = calculations.calculate_satisfaction(groupListModifiedAggregation, recommendations, k)
 
+    # modify alfa value (used in the hybrid method)
     alfa = max(list(satisfactionHybrid.values())) - min(list(satisfactionHybrid.values()))
 
     # calculate the average satisfaction scores from this round
@@ -84,37 +92,35 @@ for i in range(1, RECOMMENDATION_ROUNDS + 1):
     # remove top-k movies from both group recommendation lists
     recommendations = calculations.remove_movies(recommendations, [groupListHybrid, groupListModifiedAggregation], k)
     
+# create a DataFrame for GroupSatO and GroupDisO results
+df_results = pd.DataFrame(columns=['GroupSatO:HYBRID', 'GroupSatO:MODIF.AGGR.', 'GroupDisO:HYBRID', 'GroupDisO:MODIF.AGGR.'])
 
 # calculate average of the average of group satisfaction scores
-groupSatOHybridAverage = df_scores['GroupSatO:HYBRID'].mean()
-groupSatOModifiedAggregationAverage = df_scores['GroupSatO:MODIF.AGGR.'].mean()
+groupSatOHybrid = df_scores['GroupSat:HYBRID'].mean()
+groupSatOModifiedAggregation = df_scores['GroupSat:MODIF.AGGR.'].mean()
 
 # calculate average of the group dissatisfaction scores
-groupDisOHybridAverage = df_scores['GroupDisO:HYBRID'].mean()
-groupDisOModifiedAggregationAverage = df_scores['GroupDisO:MODIF.AGGR.'].mean()
+groupDisOHybrid = df_scores['GroupDis:HYBRID'].mean()
+groupDisOModifiedAggregation = df_scores['GroupDis:MODIF.AGGR.'].mean()
 
-print(f'\nAfter {RECOMMENDATION_ROUNDS} recommendation rounds')
+# add to results dataframe
+df_results.loc[1] = [groupSatOHybrid, groupSatOModifiedAggregation, groupDisOHybrid, groupDisOModifiedAggregation]
 
-print('Scores:')
+print(f'\nAFTER {RECOMMENDATION_ROUNDS} RECOMMENDATION ROUNDS')
+
+print('\nResults:')
 print(df_scores)
 
-print('\nHYBRID METHOD')
-print(f'GroupSatO: {groupSatOHybridAverage:.4f}')
-print(f'GroupDisO: {groupDisOHybridAverage:.4f}')
-print(f'F-score: {calculations.calculate_F_score(groupSatOHybridAverage, groupDisOHybridAverage):4f}')
-print(f'satisfaction scores for each round')
-print(df_scores['GroupSatO:HYBRID'].to_numpy())
-print(f'dissatisfaction scores for each round')
-print(df_scores['GroupDisO:HYBRID'].to_numpy())
+print(df_results)
 
-print('\nMODIFIED AVERAGE AGGREGATION METHOD')
-print(f'GroupSatO: {groupSatOModifiedAggregationAverage:.4f}')
-print(f'GroupDisO: {groupDisOModifiedAggregationAverage:.4f}')
-print(f'F-score: {calculations.calculate_F_score(groupSatOModifiedAggregationAverage, groupDisOModifiedAggregationAverage):4f}')
-print(f'satisfaction scores for each round')
-print(df_scores['GroupSatO:MODIF.AGGR.'].to_numpy())
-print(f'dissatisfaction scores for each round')
-print(df_scores['GroupDisO:MODIF.AGGR.'].to_numpy())
+print(f'\nF-score, HYBRID: {calculations.calculate_F_score(groupSatOHybrid, groupDisOHybrid):4f}')
+print(f'F-score, MODIFIED AGGREGATION: {calculations.calculate_F_score(groupSatOModifiedAggregation, groupDisOModifiedAggregation):4f}')
+
+print('\nSIMILARITY MATRIX FOR TARGER USERS:')
+print(df_group_similarity)
+
+end = time.time()
+print(f'\nRecommendations finished in {(end - start):1f} seconds')
 
 ### PLOT RESULTS
-#visualization.plot_satisfaction_dissatisfaction(df_scores)
+visualization.plot_satisfaction_dissatisfaction(df_scores)
