@@ -18,8 +18,6 @@ MOVIES_IN_COMMON_MINIMUM = 6
 RECOMMENDATION_ROUNDS = 5
 INITIAL_DATA_CHUNK_SIZE = 100000
 
-start = time.time()
-
 # get initial data chunk 
 initialRatingsDataChunk = pd.read_csv('movielens-25m/ratings.csv', usecols=['userId', 'movieId', 'rating'], chunksize=INITIAL_DATA_CHUNK_SIZE)
 df_ratings_initial_chunk = initialRatingsDataChunk.get_chunk()
@@ -38,8 +36,11 @@ for i in range(0, NUMBER_OF_USERS):
     users.append(user)
     allUsers.remove(user)
 
-# calculate similarities between group users
+# calculate similarity matrix for the group
 df_group_similarity = similarities.calculate_group_similarity_matrix(users, df_ratings_initial_chunk)
+
+print('\nCalculating recommendations...')
+start = time.time()
 
 # calculate individial recommendation lists (a dict, where userId is the key and the recommendation list for that user is the dict value)
 recommendations = calculations.calculate_recommendations_all(df_ratings_initial_chunk, scaler, users, MOVIES_IN_COMMON_MINIMUM, CORRELATION_THRESHOLD)

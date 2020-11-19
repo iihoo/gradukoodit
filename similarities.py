@@ -2,6 +2,8 @@ import math
 import pandas as pd
 import numpy as np
 
+from scipy import stats
+
 def similar_users(ratings, userId, moviesInCommonMinimum, correlationThreshold):
     """
     Get similar users for target user (userId).
@@ -39,30 +41,21 @@ def pearson_correlations(targetUserRatings, ratingSubsetFiltered):
     """
     Calculate Pearson Correlation value between the target user and candidate users.
 
-    Returns a dataframe with columns PearsonCorrelation and userId, with correlation values higher than 'correlationThreshold'.
+    Returns a dataframe with columns PearsonCorrelation and userId.
     """
     pearsonCorrelationDict = {}
-    targetUserRatingsAverage = targetUserRatings['rating'].mean()
 
     # calculate Pearson Correlation value for each candidate user one by one
     for candidateUserId, candidateUserRatings in ratingSubsetFiltered:
 
-        candidateUserRatingsAverage = candidateUserRatings['rating'].mean()
-
         # merge
-        merged = targetUserRatings.merge(candidateUserRatings, on='movieId', suffixes=('_target', '_candidate'))  
+        df_merged = targetUserRatings.merge(candidateUserRatings, on='movieId', suffixes=('_target', '_candidate'))  
 
-        # add temporary columns that will be used for calculating the Pearson correlation value
-        merged['temp_target'] = merged['rating_target'] - targetUserRatingsAverage
-        merged['temp2_target'] = (merged['rating_target'] - targetUserRatingsAverage) ** 2
-        merged['temp_candidate'] = merged['rating_candidate'] - candidateUserRatingsAverage
-        merged['temp2_candidate'] = (merged['rating_candidate'] - candidateUserRatingsAverage) ** 2
-        merged['temp'] = merged['temp_target'] * merged['temp_candidate']
+        # calculate Pearson correlation value for the ratings of target user and candidate user, returns tuple of (pearsonCorrelationCoefficient, p-value)
+        corr = stats.pearsonr(df_merged['rating_target'], df_merged['rating_candidate'])
 
-        # and calculate the Pearson correlation value
-        # if either part of denominator is 0, the correlation value is 0
-        correlationValue = merged['temp'].sum() / ( (merged['temp2_target'].sum() ** 0.5) * (merged['temp2_candidate'].sum() ** 0.5) ) if merged['temp2_target'].sum() != 0 and merged['temp2_candidate'].sum() != 0 else 0
-        correlationValue = round(correlationValue, 3)
+        # correlationValue = 0 if corr is nan
+        correlationValue = round(corr[0], 3) if not np.isnan(corr[0]) else 0
         
         pearsonCorrelationDict[candidateUserId] = correlationValue
         
