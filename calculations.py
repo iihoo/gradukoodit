@@ -16,7 +16,13 @@ def calculate_recommendations_all(ratings, scaler, users, MOVIES_IN_COMMON_MINIM
     # calculate individual recommendation lists and add to a dict
     recommendations = {}
     for i in range(0, len(users)):
-        correlations = similarities.similar_users(ratings, users[i], MOVIES_IN_COMMON_MINIMUM, CORRELATION_THRESHOLD)
+        correlations = similarities.similarity_values(ratings, users[i], MOVIES_IN_COMMON_MINIMUM)
+        # filter correlation values that are NOT higher than the threshold
+        correlationThresholdCondition = correlations['PearsonCorrelation'] > CORRELATION_THRESHOLD
+        correlations = correlations[correlationThresholdCondition]
+
+        # sort
+        correlations.sort_values(by='PearsonCorrelation', ascending=False, inplace=True)
         recommendations[users[i]] = calculate_recommendations_single(ratings, scaler, average, correlations, users[i])
     return recommendations
 

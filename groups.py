@@ -25,7 +25,10 @@ with open('grouptypes/group-3-2.csv', 'x') as file:
         print(groupToString, file=file)
 '''
 
-for i in range(0, 1):
+for i in range(0, 3):
         group = groupformation.create_group_type_3_2(df_ratings_initial_chunk, MOVIES_IN_COMMON_MINIMUM, SIMILARITY_THRESHOLD, DISSIMILARITY_THRESHOLD)
-        print(similarities.calculate_group_similarity_matrix(group, df_ratings_initial_chunk))
-        groupToString = ','.join([str(user) for user in group])
+        if (group == None):
+            print(f'\nNo suitable users could be found at round {i + 1}.\n')
+        else:
+            print(similarities.calculate_group_similarity_matrix(group, df_ratings_initial_chunk))
+            groupToString = ','.join([str(user) for user in group])

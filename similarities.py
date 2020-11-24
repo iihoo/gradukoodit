@@ -1,16 +1,17 @@
 import math
 import pandas as pd
 import numpy as np
+import warnings
 
 from scipy import stats
+from scipy.stats import PearsonRConstantInputWarning
 
-def similar_users(ratings, userId, moviesInCommonMinimum, correlationThreshold):
+def similarity_values(ratings, userId, moviesInCommonMinimum):
     """
     Get similar users for target user (userId).
 
     Function will return Pearson Correlation values for users that
     - have rated more than 'moviesInCommonMinimum' identical items with the target user (userId)
-    - and have Pearson Correlation value higher that the 'correlationThreshold'.
     """
     targetUserRatings = ratings[ratings['userId'] == userId]
 
@@ -28,13 +29,6 @@ def similar_users(ratings, userId, moviesInCommonMinimum, correlationThreshold):
     # calculate Pearson correlation values
     correlations = pearson_correlations(targetUserRatings, ratingSubsetFiltered)
 
-    # filter correlation values that are NOT higher than the threshold
-    correlationThresholdCondition = correlations['PearsonCorrelation'] > correlationThreshold
-    correlations = correlations[correlationThresholdCondition]
-
-    # sort
-    correlations.sort_values(by='PearsonCorrelation', ascending=False, inplace=True)
-
     return correlations
 
 def pearson_correlations(targetUserRatings, ratingSubsetFiltered):
@@ -51,8 +45,14 @@ def pearson_correlations(targetUserRatings, ratingSubsetFiltered):
         # merge
         df_merged = targetUserRatings.merge(candidateUserRatings, on='movieId', suffixes=('_target', '_candidate'))  
 
-        # calculate Pearson correlation value for the ratings of target user and candidate user, returns tuple of (pearsonCorrelationCoefficient, p-value)
-        corr = stats.pearsonr(df_merged['rating_target'], df_merged['rating_candidate'])
+        # ignore PearsonRConstantInputWarning from scipy.stats.pearsonr()
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                action='ignore',
+                category=PearsonRConstantInputWarning,
+                message='An input array is constant; the correlation coefficent is not defined.')
+            # calculate Pearson correlation value for the ratings of target user and candidate user, returns tuple of (pearsonCorrelationCoefficient, p-value)
+            corr = stats.pearsonr(df_merged['rating_target'], df_merged['rating_candidate'])
 
         # correlationValue = 0 if corr is nan
         correlationValue = round(corr[0], 3) if not np.isnan(corr[0]) else 0
