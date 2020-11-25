@@ -2,9 +2,7 @@ import math
 import pandas as pd
 import numpy as np
 import warnings
-
-from scipy import stats
-from scipy.stats import PearsonRConstantInputWarning
+import time
 
 def similarity_values(ratings, userId, moviesInCommonMinimum):
     """
@@ -22,14 +20,12 @@ def similarity_values(ratings, userId, moviesInCommonMinimum):
 
     # filter users that do not have rated more than 'moviesInCommonMinimum' identical movies
     ratingSubsetFiltered = ratingSubset[ratingSubset['userId'].map(ratingSubset['userId'].value_counts()) > moviesInCommonMinimum]
-   
-    # group by users
-    ratingSubsetFiltered = ratingSubsetFiltered.groupby(['userId'])
 
     # calculate Pearson correlation values
     correlations = pearson_correlations(targetUserRatings, ratingSubsetFiltered)
 
     return correlations
+
 
 def pearson_correlations(targetUserRatings, ratingSubsetFiltered):
     """
@@ -37,36 +33,22 @@ def pearson_correlations(targetUserRatings, ratingSubsetFiltered):
 
     Returns a dataframe with columns PearsonCorrelation and userId.
     """
-    pearsonCorrelationDict = {}
 
-    # calculate Pearson Correlation value for each candidate user one by one
-    for candidateUserId, candidateUserRatings in ratingSubsetFiltered:
+    df_temp = ratingSubsetFiltered.merge(targetUserRatings, on='movieId', suffixes=('_candidate', '_target'))
+    df_temp2 = df_temp.groupby('userId_candidate')
 
-        # merge
-        df_merged = targetUserRatings.merge(candidateUserRatings, on='movieId', suffixes=('_target', '_candidate'))  
+    # calculate correlations
+    df_temp3 = df_temp2[['rating_candidate','rating_target']].corr()
 
-        # ignore PearsonRConstantInputWarning from scipy.stats.pearsonr()
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                action='ignore',
-                category=PearsonRConstantInputWarning,
-                message='An input array is constant; the correlation coefficent is not defined.')
-            # calculate Pearson correlation value for the ratings of target user and candidate user, returns tuple of (pearsonCorrelationCoefficient, p-value)
-            corr = stats.pearsonr(df_merged['rating_target'], df_merged['rating_candidate'])
-
-        # correlationValue = 0 if corr is nan
-        correlationValue = round(corr[0], 3) if not np.isnan(corr[0]) else 0
-        
-        pearsonCorrelationDict[candidateUserId] = correlationValue
-        
-    # create a correlation dataframe
-    correlations = pd.DataFrame.from_dict(pearsonCorrelationDict, orient='index')
-    correlations.columns = ['PearsonCorrelation']
-    correlations['userId'] = correlations.index
-    correlations.index = range(len(correlations))
+    idx = pd.IndexSlice
+    correlations = df_temp3.loc[idx[:, 'rating_candidate'],['rating_target']]
+    correlations.reset_index(inplace=True)
+    correlations.drop(columns=['level_1'], inplace=True)
+    correlations.rename(columns={'rating_target': 'PearsonCorrelation', 'userId_candidate' : 'userId'}, inplace=True)
 
     # not sorted
     return correlations
+
 
 def calculate_group_similarity_matrix(users, df_ratings):
     """
@@ -81,9 +63,6 @@ def calculate_group_similarity_matrix(users, df_ratings):
         userCondition = df_ratings['userId'].isin(users[(i + 1):])
         movieCondition = df_ratings['movieId'].isin(targetUserRatings['movieId'].tolist())
         ratingSubset = df_ratings[userCondition & movieCondition]
-   
-        # group by users
-        ratingSubset = ratingSubset.groupby(['userId'])
 
         # calculate Pearson correlation values
         correlations = pearson_correlations(targetUserRatings, ratingSubset)
