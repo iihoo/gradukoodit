@@ -57,6 +57,10 @@ satisfactionModifiedAggregation = {u:1 for u in users}
 # create a DataFrame for satisfaction & dissatisfaction scores
 df_scores = pd.DataFrame(columns=['GroupSat:HYBRID', 'GroupSat:MODIF.AGGR.', 'GroupDis:HYBRID', 'GroupDis:MODIF.AGGR.'])
 
+# initialize list of removed movies for both methods
+removedMoviesHybrid = []
+removedMoviesModifiedAggregation = []
+
 # simulate recommendation rounds
 for i in range(1, RECOMMENDATION_ROUNDS + 1):
     print('\n**********************************************************************************************************************************')
@@ -66,9 +70,13 @@ for i in range(1, RECOMMENDATION_ROUNDS + 1):
     groupListHybrid = calculations.calculate_group_recommendation_list_hybrid(recommendations, alfa)
     groupListModifiedAggregation = calculations.calculate_group_recommendation_list_modified_average_aggregation(recommendations, satisfactionModifiedAggregation)
 
+    # filter movies that have already been recommended in the previous rounds
+    groupListHybridResult = groupListHybrid[~groupListHybrid.movieId.isin(removedMoviesHybrid)]
+    groupListModifiedAggregationResult = groupListModifiedAggregation[~groupListModifiedAggregation.movieId.isin(removedMoviesModifiedAggregation)]
+
     # calculate satisfaction scores, use only top-k items in the group recommendation list
-    satisfactionHybrid = calculations.calculate_satisfaction(groupListHybrid, recommendations, k)
-    satisfactionModifiedAggregation = calculations.calculate_satisfaction(groupListModifiedAggregation, recommendations, k)
+    satisfactionHybrid = calculations.calculate_satisfaction(groupListHybridResult, recommendations, k)
+    satisfactionModifiedAggregation = calculations.calculate_satisfaction(groupListModifiedAggregationResult, recommendations, k)
 
     # modify alfa value (used in the hybrid method)
     alfa = max(list(satisfactionHybrid.values())) - min(list(satisfactionHybrid.values()))
@@ -86,12 +94,13 @@ for i in range(1, RECOMMENDATION_ROUNDS + 1):
 
     # top-k results
     print('\nResults, hybrid aggregation:')
-    print(groupListHybrid[:k])
+    print(groupListHybridResult[:k])
     print('\nResults, modified aggregation:')
-    print(groupListModifiedAggregation[:k])
+    print(groupListModifiedAggregationResult[:k])
 
-    # remove top-k movies from both group recommendation lists
-    recommendations = calculations.remove_movies(recommendations, [groupListHybrid, groupListModifiedAggregation], k)
+    # add top-k movies as to-be-removed, so as to not recommend same movies in the next round
+    removedMoviesHybrid.extend(groupListHybridResult['movieId'][:k].values)
+    removedMoviesModifiedAggregation.extend(groupListModifiedAggregationResult['movieId'][:k].values)
     
 # create a DataFrame for GroupSatO and GroupDisO results
 df_results = pd.DataFrame(columns=['GroupSatO:HYBRID', 'GroupSatO:MODIF.AGGR.', 'GroupDisO:HYBRID', 'GroupDisO:MODIF.AGGR.'])
