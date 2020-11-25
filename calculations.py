@@ -181,7 +181,6 @@ def remove_movies(recommendations, listOfGroupRecommendationLists, k):
     Remove movies (from individual users recommendation lists) that have already been recommended (top-k) in the group recommendation lists.
 
     This method works also with multiple group recommendation methods (when comparing methods).
-    'listOfGroupRecommendationLists' is a list of group recommendation lists.
 
     Returns modified individual recommendation lists (dict), where userId is the dict key, and individual recommendation list for that user is the dict value.
     """
