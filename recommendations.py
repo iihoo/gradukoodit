@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import random
 import time
+import matplotlib.pyplot as plt
 
 from sklearn.preprocessing import MinMaxScaler
 
@@ -12,19 +13,18 @@ import visualization
 # just for wide printouts
 pd.set_option('display.expand_frame_repr', False)
 
-groups = [[265, 390, 799, 8051, 10989],
-[265, 390, 799, 8051, 10989],
+groups = [[16, 127, 2715, 3012, 7959],
+[7, 32, 7176, 8389, 12075],
 [21, 91, 3001, 6562, 9840],
-[16, 57, 260, 4991, 6074],
-[2, 20, 2915, 4862, 6446],
-[5, 10, 1154, 6579, 9133],
-[22, 85, 1450, 4475, 7278],
-[57, 196, 251, 1056, 9685],
-[5, 675, 1207, 2597, 12856],
-[16, 127, 2715, 3012, 7959]]
+[3, 326, 373, 9387, 11955],
+[20, 424, 4422, 6646, 13138],
+[44, 108, 5395, 7818, 11649],
+[33, 710, 755, 2678, 4806],
+[2, 117, 2095, 5573, 6846],
+[164, 571, 2320, 5583, 10787],]
 
 NUMBER_OF_USERS = len(groups[0])
-NUMBER_OF_ITERATIONS = len(groups)
+NUMBER_OF_GROUPS = len(groups)
 CORRELATION_THRESHOLD = 0.7
 MOVIES_IN_COMMON_MINIMUM = 6
 RECOMMENDATION_ROUNDS = 15
@@ -44,7 +44,7 @@ scaler = MinMaxScaler(feature_range=(ratingScale))
 index = pd.MultiIndex.from_tuples([(1,5)], names=('group', 'round'))
 df_results = pd.DataFrame(index=index, columns=['GroupSatO:HYBRID', 'GroupSatO:MODIF.AGGR.', 'GroupDisO:HYBRID', 'GroupDisO:MODIF.AGGR.', 'F-score:HYBRID', 'F-score:MODIF.AGGR.'])
 
-for i in range(0, NUMBER_OF_ITERATIONS):
+for i in range(0, NUMBER_OF_GROUPS):
     # pick one group for this iteration
     users = groups[i]
 
@@ -123,16 +123,13 @@ for i in range(0, NUMBER_OF_ITERATIONS):
             df_results.loc[(i + 1,r),:] = [groupSatOHybrid, groupSatOModifiedAggregation, groupDisOHybrid, groupDisOModifiedAggregation, F_hybrid, F_ModifiedAggregation]
 
     end = time.time()
-    print(f'..calculations finished in {(end - start):1f} seconds')
+    print(f'..calculations finished in {(end - start):.1f} seconds')
     print(f'SIMILARITY MATRIX FOR USERS IN THE GROUP:')
     print(df_group_similarity)
 
-    ## PLOT RESULTS
-    #visualization.plot_satisfaction_dissatisfaction(df_scores)
-
-print(f'\nRESULTS AFTER {NUMBER_OF_ITERATIONS} ITERATION ROUNDS')
+print(f'\nRESULTS FOR {NUMBER_OF_GROUPS} ITERATION ROUNDS')
 print(df_results)
 
-
-
-
+## PLOT RESULTS (GroupSatO and GroupDisO)
+# NOTE plot results for groups 1-9
+visualization.plot_results(df_results)
