@@ -1,7 +1,6 @@
 import math
 import pandas as pd
 import numpy as np
-import warnings
 import time
 
 def similarity_values(ratings, userId, moviesInCommonMinimum):
@@ -19,7 +18,7 @@ def similarity_values(ratings, userId, moviesInCommonMinimum):
     ratingSubset = ratings[userCondition & movieCondition]
 
     # filter users that do not have rated more than 'moviesInCommonMinimum' identical movies
-    ratingSubsetFiltered = ratingSubset[ratingSubset['userId'].map(ratingSubset['userId'].value_counts()) > moviesInCommonMinimum]
+    ratingSubsetFiltered = ratingSubset[ratingSubset['userId'].map(ratingSubset['userId'].value_counts()) >= moviesInCommonMinimum]
 
     # calculate Pearson correlation values
     correlations = pearson_correlations(targetUserRatings, ratingSubsetFiltered)
