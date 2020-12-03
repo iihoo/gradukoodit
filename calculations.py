@@ -30,8 +30,16 @@ def calculate_recommendations_single(ratings, scaler, average, correlations, use
     """
     Calculates a recommendation list for a user (userId).
 
-    Prediction function: 
-    prediction(a,p) = average(r_a) + sum( similarity(a,b)*(r_b,p - average(r_b)) ) / sum(similarity(a,b))
+    Prediction function (prediction for movie 'p' for user 'a'): 
+    prediction(a,p) = r_a_average + sum[similarity(a,b)*(r_b_p - r_b_average)] / sum(similarity(a,b)),
+        where r_a_average is the averege of ratings for user a
+        where r_b_average is the average of ratings for user b
+        where r_b_p is the rating of movie p for user b
+        where similarity(a,b) is the Pearson Correlation value between users a and b
+        where b are all the users, that have rated movie p.
+
+
+    NOTE prediction function formula is presented in 'formulas' folder.
 
     Parameter 'scaler' is a MinMaxScaler that is used to scale ratings according to the original rating data.
 
@@ -174,26 +182,8 @@ def calculate_satisfaction(df_group_recommendation, recommendations, k):
         groupListSatisfaction = df_group_recommendation[str(user)][:k].sum()
         userListSatisfaction = recommendations[user]['prediction'][:k].sum()
         satisfaction[user] = groupListSatisfaction / userListSatisfaction
+
     return satisfaction
-
-def remove_movies(recommendations, listOfGroupRecommendationLists, k):
-    """
-    Remove movies (from individual users recommendation lists) that have already been recommended (top-k) in the group recommendation lists.
-
-    This method works also with multiple group recommendation methods (when comparing methods).
-
-    Returns modified individual recommendation lists (dict), where userId is the dict key, and individual recommendation list for that user is the dict value.
-    """
-    moviesToBeRemoved = set(listOfGroupRecommendationLists[0]['movieId'][:k])
-    for i in range(1, len(listOfGroupRecommendationLists)):
-        moviesToBeRemoved.update(listOfGroupRecommendationLists[i]['movieId'][:k])
-
-    # remove from the users' recommendation list
-    for user in recommendations.keys():
-        condition = ~recommendations[user].movieId.isin(moviesToBeRemoved)
-        recommendations[user] = recommendations[user][condition]
-
-    return recommendations
 
 def calculate_F_score(groupSatOAverage, groupDisOAverage):
     return 2 * (groupSatOAverage * (1 - groupDisOAverage)) / (groupSatOAverage + (1 - groupDisOAverage))
