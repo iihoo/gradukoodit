@@ -19,7 +19,6 @@ def similarity_values(ratings, userId, moviesInCommonMinimum):
 
     # filter users that do not have rated more than 'moviesInCommonMinimum' identical movies
     ratingSubsetFiltered = ratingSubset[ratingSubset['userId'].map(ratingSubset['userId'].value_counts()) >= moviesInCommonMinimum]
-
     # calculate Pearson correlation values
     correlations = pearson_correlations(targetUserRatings, ratingSubsetFiltered)
 
@@ -34,17 +33,15 @@ def pearson_correlations(targetUserRatings, ratingSubsetFiltered):
     """
 
     df_temp = ratingSubsetFiltered.merge(targetUserRatings, on='movieId', suffixes=('_candidate', '_target'))
-    df_temp2 = df_temp.groupby('userId_candidate')
-
-    # calculate correlations
-    df_temp3 = df_temp2[['rating_candidate','rating_target']].corr()
+    
+    # group by user id and calculate Pearson Correlation for the ratings of candidate user and target user
+    df_temp2 = df_temp.groupby('userId_candidate')[['rating_candidate','rating_target']].corr()
 
     idx = pd.IndexSlice
-    correlations = df_temp3.loc[idx[:, 'rating_candidate'],['rating_target']]
+    correlations = df_temp2.loc[idx[:, 'rating_candidate'],['rating_target']]
     correlations.reset_index(inplace=True)
     correlations.drop(columns=['level_1'], inplace=True)
     correlations.rename(columns={'rating_target': 'PearsonCorrelation', 'userId_candidate' : 'userId'}, inplace=True)
-
     # not sorted
     return correlations
 
@@ -76,6 +73,3 @@ def calculate_group_similarity_matrix(users, df_ratings):
     df_group_similarity = df_group_similarity.combine_first(df_group_similarity.T)
 
     return df_group_similarity
-
-
-

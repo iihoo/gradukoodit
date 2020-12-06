@@ -1,5 +1,6 @@
 import pandas as pd
 import random
+import time
 
 import similarities
 
@@ -231,7 +232,7 @@ def create_group_type_3_1_1(df_ratings, moviesInCommonMinimum, similarityThresho
     return group
 
 # create a group type where all users are dissimilar with each other, and write results to file
-def create_group_type_all_dissimilar(df_ratings, moviesInCommonMinimum, dissimilarityThreshold, file):
+def create_group_type_all_dissimilar(user1, df_ratings, moviesInCommonMinimum, dissimilarityThreshold, file):
     """
     Create a group where all users are dissimilar with each other.
 
@@ -244,20 +245,20 @@ def create_group_type_all_dissimilar(df_ratings, moviesInCommonMinimum, dissimil
     DISSIMILARITY_THRESHOLD = dissimilarityThreshold
     DF_RATINGS = df_ratings
 
-    # pick the first user randomly and add to group
-    user1 = random.choice(DF_RATINGS['userId'].unique().tolist())
+    userPool = DF_RATINGS[DF_RATINGS['userId'] != user1]['userId'].unique().tolist()
 
-    def dissimilar(user):
-        df = similarities.similarity_values(DF_RATINGS, user, MOVIES_IN_COMMON_MINIMUM)
+    def dissimilar(user, userPool):
+        df = similarity_values_for_group_formation(user, userPool, DF_RATINGS, MOVIES_IN_COMMON_MINIMUM)
         df.rename(columns={'PearsonCorrelation': user}, inplace=True)
         df_dissimilar = df[df[user] <= DISSIMILARITY_THRESHOLD]
         return df_dissimilar
 
     def find_all_dissimilar(df_result):
         print(df_result)
-        if (df_result.shape[0] == 0):
+        # return False if a group cannot be formed (if from the remaining dissimilar users it is impossible to get 5)
+        if len(df_result.columns) + df_result.shape[0] < 6:
             return False
-        if len(df_result.columns) == 5:
+        elif len(df_result.columns) == 5:
             group = df_result.columns[1:].tolist()
             group.append(int(df_result.iloc[0]['userId']))
             print(f'\n Group formed: {group}\n')
@@ -265,14 +266,40 @@ def create_group_type_all_dissimilar(df_ratings, moviesInCommonMinimum, dissimil
             return True
         else:
             for i in range(0, len(df_result.index)):
-                df_dissimilar = dissimilar(int(df_result.iloc[i]['userId']))
+                user = int(df_result.iloc[i]['userId'])
+                userPool = df_result.iloc[(i + 1):]['userId'].tolist()
+                if len(userPool) == 0:
+                    return False
+                df_dissimilar = dissimilar(user, userPool)
                 df_merged = df_result.merge(df_dissimilar, left_on='userId', right_on='userId')
                 if not find_all_dissimilar(df_merged):
-                    u = int(df_result.iloc[i]['userId'])
-                    print(f'Could not merge with user {u}')
+                    print(f'Could not merge with user {user}')
                 else:
                     return True
             return False
     
-    if not find_all_dissimilar(dissimilar(user1)):
+    if not find_all_dissimilar(dissimilar(user1, userPool)):
         print(f'\n Could not form a group\n')
+    
+
+def similarity_values_for_group_formation(userId, userPool, ratings, moviesInCommonMinimum):
+    """
+    
+    """
+    targetUserRatings = ratings[ratings['userId'] == userId]
+
+    # get subset of ratings, that only include movies that the target user (userId) has also rated
+    userCondition = ratings['userId'].isin(userPool)
+    movieCondition = ratings['movieId'].isin(targetUserRatings['movieId'].tolist())
+    ratingSubset = ratings[userCondition & movieCondition]
+
+    # filter users that do not have rated more than 'moviesInCommonMinimum' identical movies
+    ratingSubsetFiltered = ratingSubset[ratingSubset['userId'].map(ratingSubset['userId'].value_counts()) >= moviesInCommonMinimum]
+
+    if ratingSubsetFiltered.shape[0] == 0:
+        correlations = pd.DataFrame(columns=['userId', 'PearsonCorrelation'])
+    else:
+        # calculate Pearson correlation values
+        correlations = similarities.pearson_correlations(targetUserRatings, ratingSubsetFiltered)
+
+    return correlations
