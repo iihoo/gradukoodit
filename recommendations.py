@@ -47,17 +47,20 @@ scaler = MinMaxScaler(feature_range=(ratingScale))
 # create a DataFrame for GroupSatO and GroupDisO results
 index = pd.MultiIndex.from_tuples([(1,5)], names=('group', 'round'))
 columnsGroupSatO = ['GroupSatO:' + method for method in METHOD_NAMES]
-columnsGroupDisO = ['GroupDisO:' + method for method in METHOD_NAMES]
-columnsFScore = ['F-score:' + method for method in METHOD_NAMES]
 df_results_sat = pd.DataFrame(index=index, columns=columnsGroupSatO)
+
+columnsGroupDisO = ['GroupDisO:' + method for method in METHOD_NAMES]
 df_results_dis = pd.DataFrame(index=index, columns=columnsGroupDisO)
+
+columnsFScore = ['F-score:' + method for method in METHOD_NAMES]
 df_results_F_score = pd.DataFrame(index=index, columns=columnsFScore)
 
+# calculate recommendations for each group, one by one
 for i in range(0, NUMBER_OF_GROUPS):
     # pick one group for this iteration
     users = groups[i]
 
-    # calculate similarity matrix for the group
+    # calculate similarity matrix for the group (just for printing)
     df_group_similarity = similarities.calculate_group_similarity_matrix(users, df_ratings_initial_chunk)
 
     print(f'\nCalculating recommendations for group {i + 1}...')
@@ -72,22 +75,16 @@ for i in range(0, NUMBER_OF_GROUPS):
     # alfa variable for hybrid aggregation method
     alfa = 0
 
-    # for the first round, initialize satisfaction score = 1, for each user (modified average aggregation)
-    satisfactionScores = {}
-    for m in METHOD_NAMES:
-        satisfactionScores[m] = {u:1 for u in users}
-
     # create a DataFrame for satisfaction & dissatisfaction scores
     columnsGroupSat = ['GroupSat:' + method for method in METHOD_NAMES]
-    columnsGroupDis = ['GroupDis:' + method for method in METHOD_NAMES]
     df_scores_sat = pd.DataFrame(columns=columnsGroupSat)
+
+    columnsGroupDis = ['GroupDis:' + method for method in METHOD_NAMES]
     df_scores_dis = pd.DataFrame(columns=columnsGroupDis)
 
-    # initialize list of removed movies for all methods
-    moviesAlreadyRecommended = {}
-    for m in METHOD_NAMES:
-        moviesAlreadyRecommended[m] = []
-
+    # initialize parameters 
+    moviesAlreadyRecommended = {}        
+    satisfactionScores = {}
     groupLists = {}
     groupListResults = {}
     groupSat = {}
@@ -95,7 +92,10 @@ for i in range(0, NUMBER_OF_GROUPS):
     groupDis = {}
     groupDisO = {}
     F_score = {}
+
     for m in METHOD_NAMES:
+        moviesAlreadyRecommended[m] = []
+        satisfactionScores[m] = {u:1 for u in users}
         groupLists[m] = []
         groupListResults[m] = []
         groupSat[m] = 1
@@ -104,72 +104,62 @@ for i in range(0, NUMBER_OF_GROUPS):
         groupDisO[m] = 0
         F_score[m] = 0
 
-    # simulate recommendation rounds
+    # calculate recommendation rounds, one by one, and save results
     for r in range(1, RECOMMENDATION_ROUNDS + 1):
-        # calculate group recommendation list(s)
-        
         for m in METHOD_NAMES:
+            # calculate group recommendation list(s)
             groupRecommendationFunction = METHODS[m]
             if groupRecommendationFunction == calculations.calculate_group_recommendation_list_hybrid:
                 groupLists[m] = groupRecommendationFunction(recommendations, alfa, satisfactionScores[m])
             else:
                 groupLists[m] = groupRecommendationFunction(recommendations, satisfactionScores[m])
 
-        # filter movies that have already been recommended in the previous rounds
-        for m in METHOD_NAMES:
+            # filter movies that have already been recommended in the previous rounds
             groupList = groupLists[m]
             filteredGroupList = groupList[~groupList.movieId.isin(moviesAlreadyRecommended[m])]
             groupListResults[m] = filteredGroupList
 
-        # calculate satisfaction scores, use only top-k items in the group recommendation list
-        for m in METHOD_NAMES:
+            # calculate satisfaction scores, use only top-k items in the group recommendation list
             satisfactionScores[m] = calculations.calculate_satisfaction(groupListResults[m], recommendations, k)
 
-        # modify alfa value (used in the hybrid method)
-        for m in METHOD_NAMES:
-            groupRecommendationFunction = METHODS[m]
+            # modify alfa value (used in the hybrid method)
             if groupRecommendationFunction == calculations.calculate_group_recommendation_list_hybrid:
                 alfa = max(list(satisfactionScores[m].values())) - min(list(satisfactionScores[m].values()))
-        #alfa = max(list(satisfactionHybrid.values())) - min(list(satisfactionHybrid.values()))
 
-        # calculate the average satisfaction scores from this round
-        # and calculate the dissatisfaction scores from this round
-        for m in METHOD_NAMES:
+            # calculate the average satisfaction scores from this round
+            # and calculate the dissatisfaction scores from this round
             satisfaction = satisfactionScores[m]
             groupSat[m] = sum(satisfaction.values()) / len(satisfaction)
             groupDis[m] = max(satisfaction.values()) - min(satisfaction.values())
 
+            # add top-k movies to moviesAlreadyRecommended, so as to not recommend same movies in the next round
+            moviesAlreadyRecommended[m].extend(groupListResults[m]['movieId'][:k].values)
+
         # add to results dataframe
         groupSatResult = [groupSat[m] for m in METHOD_NAMES]
-        groupDisResult = [groupDis[m] for m in METHOD_NAMES]
         df_scores_sat.loc[r] = groupSatResult
-        df_scores_dis.loc[r] = groupDisResult
 
-        # add top-k movies as to-be-removed, so as to not recommend same movies in the next round
-        for m in METHOD_NAMES:
-            moviesAlreadyRecommended[m].extend(groupListResults[m]['movieId'][:k].values)
+        groupDisResult = [groupDis[m] for m in METHOD_NAMES]
+        df_scores_dis.loc[r] = groupDisResult            
 
         # calculate results after 5, 10 and 15 rounds
         if r in [5,10,15]:
-            # calculate average of the average of group satisfaction scores
+            
             for m in METHOD_NAMES:
-                columnName = 'GroupSat:' + m
-                groupSatO[m] = round(df_scores_sat[columnName].mean(), 3)
+                # calculate average of the average of group satisfaction scores
+                columnNameGroupSat = 'GroupSat:' + m
+                groupSatO[m] = round(df_scores_sat[columnNameGroupSat].mean(), 3)
 
-            # calculate average of the group dissatisfaction scores
-            for m in METHOD_NAMES:
-                columnName = 'GroupDis:' + m
-                groupDisO[m] = round(df_scores_dis[columnName].mean(), 3)
+                # calculate average of the group dissatisfaction scores
+                columnNameGroupDis = 'GroupDis:' + m
+                groupDisO[m] = round(df_scores_dis[columnNameGroupDis].mean(), 3)
 
-            # calculate F-scores
-            for m in METHOD_NAMES:
+                # calculate F-scores
                 F_score[m] = round(calculations.calculate_F_score(groupSatO[m], groupDisO[m]), 3)
 
             # add to results dataframe
             df_results_sat.loc[(i + 1,r),:] = [groupSatO[m] for m in METHOD_NAMES]
-
             df_results_dis.loc[(i + 1,r),:] = [groupDisO[m] for m in METHOD_NAMES]
-            
             df_results_F_score.loc[(i + 1,r),:] = [F_score[m] for m in METHOD_NAMES]
 
     end = time.time()

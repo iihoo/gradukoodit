@@ -86,6 +86,10 @@ def calculate_group_recommendation_list_hybrid(recommendationListsDict, alfa, sa
 
     Parameter alfa = max satisfaction score - min satisfaction score, from the previous round (alfa = 0 in the first round).
 
+    Group aggregation function is 'sequential hybrid aggregation method', where item score in the group list is (1 - alfa) * average() + alfa * least_misery()
+    - where average() is the average of the group's users' predicted ratings for an item and
+    - where least_misery() is the predicted rating for an item for that user, who was the least satisfied in the previous round.
+
     Returns a dataframe (group recommendation list).
     """
     # combine individual recommendation lists
@@ -114,6 +118,12 @@ def calculate_group_recommendation_list_hybrid(recommendationListsDict, alfa, sa
 def calculate_group_recommendation_list_average_min_disagreement(recommendationListsDict, satisfactionScores):
     """
     Assembles a group recommendation list from individual users' recommendation lists.
+
+    Group aggregation function is twofold:
+    - first, the group list is assembled with average aggregation (item score is the average of the group's users' predicted ratings for an item)
+        and the list group list is sorted in descending order according to the average score
+    - then, for top 200 items in the group list the group score is compared to each user's predicted rating for that item and 
+    these top 200 items are sorted in ascending order according to the disagreement between each user's predicted rating and the average rating
 
     Returns a dataframe (group recommendation list).
     """
@@ -144,7 +154,15 @@ def calculate_group_recommendation_list_adjusted_average(recommendationListsDict
     """
     Assembles a group recommendation list from individual users' recommendation lists.
 
-    Modified average aggregation is used.
+    Group aggregation function is 'adjusted average',
+    where the idea is to emphasize those users whose satisfaction (in the previous round) was lower than the average satisfaction (in the previous round)
+    - for each user a 'factor' is calculated as absolute difference between the user's satisfaction and the average satisfaction
+    - then, for each user whose individual satisfaction is lower than the average satisfaction: for each item: 
+        - multiply the user's predicted rating with (1 + factor) IF the user's predicted rating is higher than the average rating
+        - multiply the user's predicted rating with (1 - factor) IF the user's predicted rating is lower than the average rating
+    - then use normal average aggregation based on these adjusted ratings (for the users who (in the previous round) had satisfaction score higher than the average, 
+    the adjusted rating is the same as the original predicted rating)
+    - the idea is to emphasize less (than average) satisfied users.
 
     Returns a dataframe (group recommendation list).
     """    
@@ -201,8 +219,8 @@ def calculate_satisfaction(df_group_recommendation, recommendations, k):
     Returns a dict, where userId is the key, and the corresponding satisfaction score for the user is the corresponding value.
     
     Satisfaction score is calculated as satisfaction = GroupListSatisfaction/UserListSatisfaction, 
-    where GroupListSatisfaction is the sum of predicted scores of the top-k movies in the group recommendation list, for user u, and,
-    where UserListSatisfaction is the sum of predicted scores of the top-k movies in the individual recommendation list, for user u.
+    - where GroupListSatisfaction is the sum of predicted scores of the top-k movies in the group recommendation list, for user u, and,
+    - where UserListSatisfaction is the sum of predicted scores of the top-k movies in the individual recommendation list, for user u.
     """
     satisfaction = {}
     for user in recommendations.keys():
