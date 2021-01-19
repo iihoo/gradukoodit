@@ -1,6 +1,8 @@
 import pandas as pd
 
 from itertools import combinations
+from sklearn.metrics import ndcg_score
+import numpy as np
 import random
 
 import similarities
@@ -115,15 +117,15 @@ def calculate_group_recommendation_list_hybrid(recommendationListsDict, alfa, sa
 
     return df_group_recommendation
 
-def calculate_group_recommendation_list_average_min_disagreement(recommendationListsDict, satisfactionScores):
+def calculate_group_recommendation_list_average_min_disagreement(recommendationListsDict, satisfactionScores, k):
     """
     Assembles a group recommendation list from individual users' recommendation lists.
 
     Group aggregation function is twofold:
     - first, the group list is assembled with average aggregation (item score is the average of the group's users' predicted ratings for an item)
         and the list group list is sorted in descending order according to the average score
-    - then, for top 200 items in the group list the group score is compared to each user's predicted rating for that item and 
-    these top 200 items are sorted in ascending order according to the disagreement between each user's predicted rating and the average rating
+    - then, for top k items in the group list the group score is compared to each user's predicted rating for that item and 
+    these top k items are sorted in ascending order according to the disagreement between each user's predicted rating and the average rating
 
     Returns a dataframe (group recommendation list).
     """
@@ -141,8 +143,8 @@ def calculate_group_recommendation_list_average_min_disagreement(recommendationL
     df_group_recommendation.insert(len(df_group_recommendation.columns), 'min diff', abs(df_group_recommendation.iloc[:, 2:cols].div(df_group_recommendation.average, axis=0) - 1).min(axis=1))
     df_group_recommendation.insert(len(df_group_recommendation.columns), 'dis', df_group_recommendation['max diff'] - df_group_recommendation['min diff'])
 
-    df_top = df_group_recommendation[:200].copy()
-    df_rest = df_group_recommendation[200:]
+    df_top = df_group_recommendation[:k].copy()
+    df_rest = df_group_recommendation[k:]
     # sort group recommendation list based on the predicted rating for the group, in descending order
     df_top.sort_values(by=['dis'], ascending=True, inplace=True)
 
@@ -150,7 +152,7 @@ def calculate_group_recommendation_list_average_min_disagreement(recommendationL
 
     return df_top
 
-def calculate_group_recommendation_list_adjusted_average(recommendationListsDict, satisfactionScores):
+def calculate_group_recommendation_list_adjusted_average(recommendationListsDict, satisfactionScores, weight):
     """
     Assembles a group recommendation list from individual users' recommendation lists.
 
@@ -158,8 +160,8 @@ def calculate_group_recommendation_list_adjusted_average(recommendationListsDict
     where the idea is to emphasize those users whose satisfaction (in the previous round) was lower than the average satisfaction (in the previous round)
     - for each user a 'factor' is calculated as absolute difference between the user's satisfaction and the average satisfaction
     - then, for each user whose individual satisfaction is lower than the average satisfaction: for each item: 
-        - multiply the user's predicted rating with (1 + factor) IF the user's predicted rating is higher than the average rating
-        - multiply the user's predicted rating with (1 - factor) IF the user's predicted rating is lower than the average rating
+        - multiply the user's predicted rating with (1 + weight * factor) IF the user's predicted rating is higher than the average rating
+        - multiply the user's predicted rating with (1 - weight * factor) IF the user's predicted rating is lower than the average rating
     - then use normal average aggregation based on these adjusted ratings (for the users who (in the previous round) had satisfaction score higher than the average, 
     the adjusted rating is the same as the original predicted rating)
     - the idea is to emphasize less (than average) satisfied users.
@@ -184,8 +186,8 @@ def calculate_group_recommendation_list_adjusted_average(recommendationListsDict
 
         condition = df_group_recommendation[user] > df_group_recommendation['average']
         
-        df_group_recommendation.loc[condition, user + ', adj.'].apply(lambda r: r * (1 + factor) if (satisfactionScores[userId] < satisfactionAverage) else r)
-        df_group_recommendation.loc[~condition, user + ', adj.'].apply(lambda r: r * (1 - factor) if (satisfactionScores[userId] < satisfactionAverage) else r)
+        df_group_recommendation.loc[condition, user + ', adj.'] = df_group_recommendation[user] * (1 + weight * factor) if (satisfactionScores[userId] < satisfactionAverage) else df_group_recommendation[user]
+        df_group_recommendation.loc[~condition, user + ', adj.'] = df_group_recommendation[user] * (1 - weight * factor) if (satisfactionScores[userId] < satisfactionAverage) else df_group_recommendation[user]
         
     # calculate average of the adjusted predictions and add a new column
     adjusted = [column for column in df_group_recommendation.columns if 'adj.' in column]
@@ -193,6 +195,25 @@ def calculate_group_recommendation_list_adjusted_average(recommendationListsDict
         
     # sort ratings
     df_group_recommendation.sort_values(by='result', ascending=False, inplace=True)
+
+    return df_group_recommendation
+
+def calculate_group_recommendation_list_NORMAL_AVERAGE(recommendationListsDict, satisfactionScores):
+    """
+    Assembles a group recommendation list from individual users' recommendation lists.
+
+    Group aggregation function is 'average',
+
+    Returns a dataframe (group recommendation list).
+    """    
+    # combine individual recommendation lists
+    df_group_recommendation = combine_recommendation_lists(recommendationListsDict)
+
+    # calculate the average score, and add new column
+    df_group_recommendation.insert(1, 'average', df_group_recommendation.iloc[:, 1:].mean(axis=1))
+        
+    # sort ratings
+    df_group_recommendation.sort_values(by='average', ascending=False, inplace=True)
 
     return df_group_recommendation
 
@@ -229,6 +250,25 @@ def calculate_satisfaction(df_group_recommendation, recommendations, k):
         satisfaction[user] = groupListSatisfaction / userListSatisfaction
     
     return satisfaction
+
+def calculate_ndcg(df_group_recommendation, users, k):
+    """
+    Calculates NDCG scores for each user conserning the group recommendation list, top-k movies are considered.
+
+    Returns a dict, where userId is the key, and the corresponding NDCG score for the user is the corresponding value.
+    """
+    ndcg = {}
+    for user in users:
+        recommendations = df_group_recommendation[str(user)][:k]
+        relevance_score = recommendations.to_numpy()
+        # sort in descending order
+        true_relevance = -np.sort(-relevance_score, axis=0)
+        # add one dimension for NDCG calculation
+        relevance_score = np.expand_dims(relevance_score, axis=0)
+        true_relevance = np.expand_dims(true_relevance, axis=0)
+        ndcg[user] = ndcg_score(true_relevance, relevance_score)
+    return ndcg
+
 
 def calculate_F_score(groupSatOAverage, groupDisOAverage):
     return 2 * (groupSatOAverage * (1 - groupDisOAverage)) / (groupSatOAverage + (1 - groupDisOAverage))
