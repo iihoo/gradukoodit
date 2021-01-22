@@ -25,53 +25,18 @@ CORRELATION_THRESHOLD = 0.7
 MOVIES_IN_COMMON_MINIMUM = 6
 RECOMMENDATION_ROUNDS = 15
 
-'''
 METHOD_NAMES = [
-    'HYBRID', 
-    'AVERAGE-MIN-DISAGREEMENT', 
-    'ADJUSTED AVERAGE']
-METHODS = { 
-    METHOD_NAMES[0] : calculations.calculate_group_recommendation_list_hybrid, 
-    METHOD_NAMES[1] : calculations.calculate_group_recommendation_list_average_min_disagreement,
-    METHOD_NAMES[2] : calculations.calculate_group_recommendation_list_adjusted_average}
-'''
-
-METHOD_NAMES = [
-    'AVERAGE-MIN-DISAGREEMENT', # top 200
-    'AVERAGE-MIN-DISAGREEMENT VERSION 2', # top 100
-    'AVERAGE-MIN-DISAGREEMENT VERSION 3', # top 50
-    'AVERAGE-MIN-DISAGREEMENT VERSION 4', # top 300
-    'ADJUSTED AVERAGE', # w = 1 + factor
-    'ADJUSTED AVERAGE VERSION 2', # w = 1 + 0.5 * factor
-    'ADJUSTED AVERAGE VERSION 3', # w = 1 + 0.25 * factor,
-    'ADJUSTED AVERAGE VERSION 4', # W = 1 + 1.25 * factor,
-    'ADJUSTED AVERAGE VERSION 5', # W = 1 + 1.5 * factor,
-    'ADJUSTED AVERAGE VERSION 6', # W = 1 + 2 * factor
+    'AVERAGE-MIN-DISAGREEMENT',
+    'ADJUSTED AVERAGE',
     'HYBRID']
 METHODS = { 
-    METHOD_NAMES[0] : calculations.calculate_group_recommendation_list_average_min_disagreement, 
-    METHOD_NAMES[1] : calculations.calculate_group_recommendation_list_average_min_disagreement,
-    METHOD_NAMES[2] : calculations.calculate_group_recommendation_list_average_min_disagreement,
-    METHOD_NAMES[3] : calculations.calculate_group_recommendation_list_average_min_disagreement,
-    METHOD_NAMES[4] : calculations.calculate_group_recommendation_list_adjusted_average,
-    METHOD_NAMES[5] : calculations.calculate_group_recommendation_list_adjusted_average,
-    METHOD_NAMES[6] : calculations.calculate_group_recommendation_list_adjusted_average,
-    METHOD_NAMES[7] : calculations.calculate_group_recommendation_list_adjusted_average,
-    METHOD_NAMES[8] : calculations.calculate_group_recommendation_list_adjusted_average,
-    METHOD_NAMES[9] : calculations.calculate_group_recommendation_list_adjusted_average,
-    METHOD_NAMES[10] : calculations.calculate_group_recommendation_list_hybrid}
+    'AVERAGE-MIN-DISAGREEMENT' : calculations.calculate_group_recommendation_list_average_min_disagreement,
+    'ADJUSTED AVERAGE' : calculations.calculate_group_recommendation_list_adjusted_average,
+    'HYBRID' : calculations.calculate_group_recommendation_list_hybrid}
 
 CALCULATION_FACTORS = {
-    METHOD_NAMES[0] : 200,
-    METHOD_NAMES[1] : 100,
-    METHOD_NAMES[2] : 50,
-    METHOD_NAMES[3] : 300,
-    METHOD_NAMES[4] : 0,
-    METHOD_NAMES[5] : 0.5,
-    METHOD_NAMES[6] : 0.25,
-    METHOD_NAMES[7] : 1.25,
-    METHOD_NAMES[8] : 1.5,
-    METHOD_NAMES[9] : 2.0 
+    'AVERAGE-MIN-DISAGREEMENT' : 200, # k = 200
+    'ADJUSTED AVERAGE' : 0.25 # weight = 0.25
 }
 
 df_ratings = pd.read_table('movielens-10m/ratings.dat', sep='::', usecols=[0,1,2], names=['userId', 'movieId', 'rating'], engine='python')
@@ -263,7 +228,7 @@ print(df_results_F_score.apply(pd.to_numeric).groupby(level='round').agg('mean')
 
 
 ### SAVE RESULTS TO FILE
-filename = f'results/results_{groupType}'
+filename = f'results/results_21-01-2021_{groupType}'
 with open(f'{filename}.csv', 'a') as file:
     print(f'group type: {groupType}, number of groups: {len(groups)}, number of users in a group: {NUMBER_OF_USERS}, number of groups: {NUMBER_OF_GROUPS}, correlation threshold: {CORRELATION_THRESHOLD}, movies in common minimum: {MOVIES_IN_COMMON_MINIMUM}, recommendation rounds: {RECOMMENDATION_ROUNDS}, ratings data size: {df_ratings.shape[0]}', file=file)
 
