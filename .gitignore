@@ -1,8 +1,9 @@
 .DS_Store
 .vscode/
 
-#ignore movielens-25m data set
+#ignore movielens data sets
 movielens-25m
+movielens-10m
 
 __pycache__
 *.pyc

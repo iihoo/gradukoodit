@@ -275,8 +275,8 @@ def create_group_type_all_dissimilar(df_ratings, moviesInCommonMinimum, similari
         return df_dissimilar
 
     def find_all_dissimilar(df_result):
-        if time.time() - start > 180:
-            print('ABORTING.... took more than 180 sec')
+        if time.time() - start > 500:
+            print('ABORTING.... took more than 500 sec')
             return True
         # return False if a group cannot be formed (if from the remaining dissimilar users it is impossible to get 5)
         if len(df_result.columns) + df_result.shape[0] < 6:
@@ -303,6 +303,76 @@ def create_group_type_all_dissimilar(df_ratings, moviesInCommonMinimum, similari
     
     if not find_all_dissimilar(dissimilar(user1, userPool)):
         print(f'\n Could not form a group\n')
+
+# create a group type all-similar
+def create_group_type_all_similar(df_ratings, moviesInCommonMinimum, similarityThreshold, dissimilarityThreshold):
+    """
+    Create a group where all users are similar with each other.
+
+    Write results to 'file'.
+    
+    Users are considered similar when they have a Pearson Correlation value above 'similarityThreshold'.
+    """
+    group = []
+
+    # pick the first user randomly and add to group
+    user1 = random.choice(df_ratings['userId'].unique().tolist())
+    group.append(user1)    
+
+    # get similar users for the group member 1
+    user = group[0]
+    df_1 = similarities.similarity_values(df_ratings, user, moviesInCommonMinimum)
+    df_1.rename(columns={'PearsonCorrelation': f'PearsonCorrelation_{user}'}, inplace=True)
+    df_similar_1 = df_1[df_1[f'PearsonCorrelation_{user}'] >= similarityThreshold]
+    
+    # get group member 2 from the similar user for group member 1, stop searching if no similar users are found
+    if (df_similar_1.shape[0] < 1):
+        return None
+    group.append(int(df_similar_1.iloc[0]['userId']))
+
+    # get similar users for the group member 2
+    user = group[1]
+    df_2 = similarities.similarity_values(df_ratings, user, moviesInCommonMinimum)
+    df_2.rename(columns={'PearsonCorrelation': f'PearsonCorrelation_{user}'}, inplace=True)
+    df_similar_2 = df_2[df_2[f'PearsonCorrelation_{user}'] >= similarityThreshold]
+
+    # merge similar users for both group member 1 and group member 2
+    df_merged_1 = df_similar_1.merge(df_similar_2, left_on='userId', right_on='userId')
+
+    # and get group member 3, stop searching if no similar/dissimilar users are found
+    if (df_merged_1.shape[0] < 1):
+        return None
+    group.append(int(df_merged_1.iloc[0]['userId']))
+
+    # get similar users for the group member 3
+    user = group[2]
+    df_3 = similarities.similarity_values(df_ratings, user, moviesInCommonMinimum)
+    df_3.rename(columns={'PearsonCorrelation': f'PearsonCorrelation_{user}'}, inplace=True)
+    df_similar_3 = df_3[df_3[f'PearsonCorrelation_{user}'] >= similarityThreshold]
+
+    # merge similar users for group members 1, 2 and 3
+    df_merged_2 = df_merged_1.merge(df_similar_3, left_on='userId', right_on='userId')
+    
+    # and get group member 4, stop searching if no similar/dissimilar users are found
+    if (df_merged_2.shape[0] < 1):
+        return None
+    group.append(int(df_merged_2.iloc[0]['userId']))
+
+    # get similar users for the group member 4
+    user = group[3]
+    df_4 = similarities.similarity_values(df_ratings, user, moviesInCommonMinimum)
+    df_4.rename(columns={'PearsonCorrelation': f'PearsonCorrelation_{user}'}, inplace=True)
+    df_similar_4 = df_4[df_4[f'PearsonCorrelation_{user}'] >= similarityThreshold]
+
+    # merge similar users for group members 1, 2, 3 and 4
+    df_merged_3 = df_merged_2.merge(df_similar_4, left_on='userId', right_on='userId')
+    
+    # and get group member 5, stop searching if no similar/dissimilar users are found
+    if (df_merged_3.shape[0] < 1):
+        return None
+    group.append(int(df_merged_3.iloc[0]['userId']))
+
+    return group
 
 def similarity_values_for_group_formation(userId, userPool, ratings, moviesInCommonMinimum):
     """

@@ -13,10 +13,111 @@ import visualization
 # just for wide printouts
 pd.set_option('display.expand_frame_repr', False)
 
-groupType = 'all-dissimilar'
+groupType = 'all-similar'
+
+PRINT_RESULTS = True
 
 groups = [
-[42772, 1451, 34309, 34670, 58136]
+[53478,8,2418,5122,19199],
+[34547,56,126,480,1139],
+[39617,5,98,251,292],
+[13990,37,174,823,1639],
+[16341,23,44,251,2548],
+[56187,24,314,2397,5916],
+[42490,9,44,254,6421],
+[33507,8,79,1309,1667],
+[61040,3,1524,4289,8082],
+[63429,9,44,292,1077],
+[71009,6,16,954,2469],
+[17397,2,305,568,38173],
+[51757,18,370,638,3607],
+[61722,8,1667,19199,65729],
+[7316,2,77,476,762],
+[4244,13,53,400,3062],
+[44783,2,126,204,232],
+[20444,60,305,332,5890],
+[59292,13,206,249,314],
+[2295,4,116,4076,4144],
+[55305,5,10,107,4622],
+[42431,6,53,78,272],
+[36225,4,298,507,6592],
+[37332,2,84,229,307],
+[33245,5,249,314,891],
+[266,5,13,140,481],
+[16001,56,212,292,5418],
+[15138,16,88,801,3565],
+[633,3,126,303,2018],
+[13679,5,100,107,956],
+[64216,18,95,206,232],
+[12308,2,19,462,936],
+[24574,34,124,1639,6734],
+[21307,41,50,160,1797],
+[3433,10,345,2376,8459],
+[4075,18,272,1301,3114],
+[49617,13,151,355,3919],
+[21934,18,75,170,254],
+[54247,6,78,272,503],
+[57324,5,56,100,229],
+[22486,6,53,480,834],
+[40430,19,393,670,2875],
+[60773,18,71,79,95],
+[31483,16,160,215,900],
+[38309,13,206,210,1041],
+[42387,44,79,235,2010],
+[56567,50,59,76,160],
+[25088,8,238,1218,3153],
+[32241,58,255,384,1799],
+[14513,13,53,226,314],
+[36616,35,192,205,910],
+[4821,8,23,917,1867],
+[40377,5,22,56,251],
+[4723,23,33,716,724],
+[46975,2,118,232,547],
+[4454,27,173,253,1939],
+[54863,9,292,544,2073],
+[34176,4,54,1185,2398],
+[59257,19,95,294,1607],
+[36711,36,160,480,3719],
+[19704,41,160,1274,2286],
+[71465,22,92,136,2666],
+[21212,23,33,126,269],
+[10106,38,6847,27038,33606],
+[24613,6,160,215,341],
+[67925,9,35,389,579],
+[53927,6,53,272,296],
+[63122,4,267,712,1113],
+[3610,5,95,232,891],
+[36945,19,354,2327,34834],
+[8723,27,77,253,997],
+[28097,23,119,145,1286],
+[1277,18,100,367,3917],
+[52426,7,160,272,275],
+[3594,2,84,677,1383],
+[2474,60,381,1326,2980],
+[37181,11,16,160,571],
+[39724,212,292,2596,6508],
+[46473,5,10,1023,2689],
+[17432,51,1277,3723,5164],
+[52557,3,1617,16489,24136],
+[23276,50,59,162,321],
+[39393,5,13,140,266],
+[22125,9,254,389,2091],
+[948,12,458,1818,7527],
+[20502,19,302,2230,6027],
+[29613,13,206,950,3172],
+[31551,5,95,296,866],
+[51655,18,254,303,1018],
+[10650,36,303,480,3956],
+[11927,26,59,137,141],
+[12874,24,370,617,4513],
+[10996,34,12837,17116,20336],
+[56063,179,1281,9654,11471],
+[40513,4,176,638,2493],
+[46323,6,16,954,3246],
+[32130,6,162,966,1271],
+[2875,16,88,801,3824],
+[37132,4,138,338,1382],
+[18321,7,509,769,6096]
 ]
 
 NUMBER_OF_USERS = len(groups[0])
@@ -135,6 +236,11 @@ for i in range(0, NUMBER_OF_GROUPS):
             filteredGroupList = groupList[~groupList.movieId.isin(moviesAlreadyRecommended[m])]
             groupListResults[m] = filteredGroupList
 
+            ###
+            print(f'\nResult for method = {m}')
+            print(filteredGroupList)
+            ###
+
             # calculate satisfaction scores, use only top-k items in the group recommendation list
             satisfactionScores[m] = calculations.calculate_satisfaction(groupListResults[m], recommendations, k)
 
@@ -227,19 +333,20 @@ print('\n...and average results per round')
 print(df_results_F_score.apply(pd.to_numeric).groupby(level='round').agg('mean'))
 
 
-### SAVE RESULTS TO FILE
-filename = f'results/results_21-01-2021_{groupType}'
-with open(f'{filename}.csv', 'a') as file:
-    print(f'group type: {groupType}, number of groups: {len(groups)}, number of users in a group: {NUMBER_OF_USERS}, number of groups: {NUMBER_OF_GROUPS}, correlation threshold: {CORRELATION_THRESHOLD}, movies in common minimum: {MOVIES_IN_COMMON_MINIMUM}, recommendation rounds: {RECOMMENDATION_ROUNDS}, ratings data size: {df_ratings.shape[0]}', file=file)
+if (PRINT_RESULTS == True):
+    ### SAVE RESULTS TO FILE
+    filename = f'results/results_20-03-2021_{groupType}'
+    with open(f'{filename}.csv', 'a') as file:
+        print(f'group type: {groupType}, number of groups: {len(groups)}, number of users in a group: {NUMBER_OF_USERS}, number of groups: {NUMBER_OF_GROUPS}, correlation threshold: {CORRELATION_THRESHOLD}, movies in common minimum: {MOVIES_IN_COMMON_MINIMUM}, recommendation rounds: {RECOMMENDATION_ROUNDS}, ratings data size: {df_ratings.shape[0]}', file=file)
 
-    #df_results_sat.to_csv(f'{filename}.csv', mode='a')
-    df_results_sat.apply(pd.to_numeric).groupby(level='round').agg('mean').to_csv(f'{filename}.csv', mode='a')
+        #df_results_sat.to_csv(f'{filename}.csv', mode='a')
+        df_results_sat.apply(pd.to_numeric).groupby(level='round').agg('mean').to_csv(f'{filename}.csv', mode='a')
 
-    #df_results_dis.to_csv(f'{filename}.csv', mode='a')
-    df_results_dis.apply(pd.to_numeric).groupby(level='round').agg('mean').to_csv(f'{filename}.csv', mode='a')
+        #df_results_dis.to_csv(f'{filename}.csv', mode='a')
+        df_results_dis.apply(pd.to_numeric).groupby(level='round').agg('mean').to_csv(f'{filename}.csv', mode='a')
 
-    #df_results_ndcg.to_csv(f'{filename}.csv', mode='a')
-    df_results_ndcg.apply(pd.to_numeric).groupby(level='round').agg('mean').to_csv(f'{filename}.csv', mode='a')
+        #df_results_ndcg.to_csv(f'{filename}.csv', mode='a')
+        df_results_ndcg.apply(pd.to_numeric).groupby(level='round').agg('mean').to_csv(f'{filename}.csv', mode='a')
 
-    #df_results_F_score.to_csv(f'{filename}.csv', mode='a')    
-    df_results_F_score.apply(pd.to_numeric).groupby(level='round').agg('mean').to_csv(f'{filename}.csv', mode='a')
+        #df_results_F_score.to_csv(f'{filename}.csv', mode='a')    
+        df_results_F_score.apply(pd.to_numeric).groupby(level='round').agg('mean').to_csv(f'{filename}.csv', mode='a')
